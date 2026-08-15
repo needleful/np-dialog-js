@@ -1,4 +1,4 @@
-{talked == 0}
+[talked = #0]
 	This is our first time talking.
 [otherwise]
 	This is our next time talking.
