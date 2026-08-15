@@ -1,3 +1,0 @@
-function decode(strText) {
-
-}
