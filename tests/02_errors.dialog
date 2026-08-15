@@ -1,0 +1,4 @@
+[op1 ++ op2] Invalid operator!
+	[this ! that] Unsupported infix operation.
+[? something] Unsupported prefix
+	[something else + : this | ] Unsupported postfix

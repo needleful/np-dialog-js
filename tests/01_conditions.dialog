@@ -2,4 +2,7 @@
 	This is our first time talking.
 [otherwise]
 	This is our next time talking.
-	Hello!
+	[game good?]
+		Hello!
+	[otherwise][something else]
+		Looks like it's not working!

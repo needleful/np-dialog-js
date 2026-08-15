@@ -23,14 +23,13 @@ const Tok = {
 	markEscape: 20,
 	markItalics: 21,
 	markBold: 22,
-	markStrike: 22,
-	markInterpolate:23,
+	markStrike: 23,
+	markInterpolate:24,
 
 	exStart: 30,
 	exEnd: 31,
 	exIdentifier: 32,
-	exStartOp: 33,
-	exEndOp: 34,
+	exOp: 33,
 	exArgSplit: 35,
 	exText: 36,
 	exRawValue: 37,
@@ -138,11 +137,14 @@ function tokenize(strText) {
 			return matchesRegex(Tok.exDynamicVar, /^\$\p{Alpha}[\-'+\p{Alpha}\d_]*\b/u)
 		}
 		function grabRawValue() {
-			return matchesRegex(Tok.exRawValue, /^\#[^\]\|]/);
+			return matchesRegex(Tok.exRawValue, /^\#[^\]\|]+/);
+		}
+		function grabOp() {
+			return matchesRegex(Tok.exOp, /^[+\-=/\\|?<>&%$!@:]+/);
 		}
 		var intStart = intC;
 		// Optional starting operator
-		matchesString(Tok.exStartOp, '!');
+		grabOp();
 		// Required starting identifier or sub-expression
 		var bValid = (matchesString(Tok.exStart, '[')
 			|| grabIdentifer()
@@ -160,7 +162,7 @@ function tokenize(strText) {
 		// Function head
 		while(isGood()) {
 			if(grabIdentifer()) continue;
-			if(matchesRegex(Tok.exEndOp, /^[+\-=/\\|?<>&%$!@:]+/))
+			if(grabOp())
 				break;
 			if(matchesString(Tok.exEnd, ']')) {
 				return;
@@ -175,7 +177,7 @@ function tokenize(strText) {
 			if(matchesString(Tok.exArgSplit, '|')
 				|| grabDynVar()
 				|| grabRawValue()
-				|| matchesRegex(Tok.exText, /^[^\]\\|]/)
+				|| matchesRegex(Tok.exText, /^[^\]\\|]+/)
 			) {
 				continue;
 			}
@@ -254,6 +256,43 @@ const ItemType = {
 	option: 2
 };
 
+const OpFlags = {
+	prefix: 1,
+	postfix: 2,
+	infix: 4
+};
+let OpFlagNames = {
+	1: 'prefix',
+	2: 'postfix',
+	3: 'prefix & postfix',
+	4: 'infix',
+	5: 'prefix & infix',
+	6: 'postfix & infix',
+	7: 'prefix, postfix & infix'
+};
+
+const Operators = {
+	'!': OpFlags.prefix,
+	'?': OpFlags.postfix,
+	':': OpFlags.infix,
+	'=': OpFlags.infix,
+	'!=': OpFlags.infix,
+	':=': OpFlags.infix,
+	'+=': OpFlags.infix,
+	'-=': OpFlags.infix,
+	'/=': OpFlags.infix,
+	'*=': OpFlags.infix,
+	'&=': OpFlags.infix,
+	'|= ': OpFlags.infix,
+	'+': OpFlags.infix | OpFlags.prefix,
+	'-': OpFlags.infix | OpFlags.prefix,
+	'*': OpFlags.infix,
+	'/': OpFlags.infix,
+	'&': OpFlags.infix,
+	'|': OpFlags.infix,
+	'@': OpFlags.infix,
+};
+
 // Returns an tree of ParseNode (prefix: ps)
 function parse(strText, a_tkTokens) {
 	var intC = 0;
@@ -275,8 +314,17 @@ function parse(strText, a_tkTokens) {
 		a_psChildren: [],
 		psParent: null,
 		intIndent: 0,
-		intLine: -1
+		intLine: -1,
+		a_errors: [],
 	};
+	function pushTkError(strMsg, tk) {
+		console.error(strMsg, tk);
+		psRoot.a_errors.push({
+			strMsg: strMsg,
+			tkSource: tk
+		});
+	}
+
 	function parseExpression() {
 		var exResult = {
 			a_head: [],
@@ -284,7 +332,32 @@ function parse(strText, a_tkTokens) {
 			strStartOp: undefined,
 			strEndOp: undefined,
 		}
+		function validateOp(tkOp, opflagReq) {
+			var strOp = tkText(tkOp);
+			if(!(strOp in Operators)) {
+				pushTkError(`Unknown operator: {${strOp}}`, tk);
+				return;
+			}
+			var flags = Operators[strOp];
+			if((opflagReq & flags) != opflagReq) {
+				pushTkError(
+					`Operator {${strOp}} was not the required type: ${OpFlagNames[opflagReq]}. Actual: ${OpFlagNames[flags]}`,
+					tkOp
+				);
+			}
+		}
 		var head = true;
+		if(peek().type == Tok.exOp) {
+			var leadOp = pop();
+			validateOp(leadOp, OpFlags.prefix);
+		}
+		var tkOp;
+		function validate() {
+			if(exResult.strEndOp) {
+				validateOp(tkOp, exResult.a_tail.length? OpFlags.infix : OpFlags.postfix);
+			}
+			return exResult;
+		}
 		// Get the head
 		while(isGood() && head) {
 			var tk = pop();
@@ -299,11 +372,12 @@ function parse(strText, a_tkTokens) {
 				exResult.a_head.push({strRaw: tkText(tk)});
 				break;
 			case Tok.exEnd:
-				return exResult;
+				return validate();
 			case Tok.exStart:
 				exResult.a_head.push(parseExpression());
 				break;
-			case Tok.exEndOp:
+			case Tok.exOp:
+				tkOp = tk;
 				exResult.strEndOp = tkText(tk);
 				head = false;
 				break;
@@ -324,17 +398,22 @@ function parse(strText, a_tkTokens) {
 			case Tok.exRawValue:
 				exResult.a_tail.push({strRaw: tkText(tk)});
 				break;
+			case Tok.exText:
+				exResult.a_tail.push(tkText(tk));
+				break;
 			case Tok.exEnd:
-				return exResult;
+				return validate();
 			case Tok.exStart:
 				exResult.a_tail.push(parseExpression());
 				break;
+			case Tok.exArgSplit:
+				break;
 			default:
 				console.error('Invalid argument: ', tkText(tk), tk)
-				return exResult;
+				return validate();
 			}
 		}
-		return exResult;
+		return validate();
 	}
 	var psParent = psRoot;
 	var intLine = 0;
@@ -453,7 +532,19 @@ function flatten(psParse) {
 // Returns DialogItems from text
 function compile(strText) {
 	var a_tkTokens = tokenize(strText);
+	var readableTokens = [];
+	for(var t = 0; t < a_tkTokens.length; t++){
+		var tk = a_tkTokens[t];
+		readableTokens.push(
+			[strText.substr(tk.intStart, tk.intLength), TokNames[tk.tokType]]
+		);
+	}
+	console.log(readableTokens);
 	var psParse = parse(strText, a_tkTokens);
+	for(var i = 0; i < psParse.a_errors.length; i++) {
+		var err = psParse.a_errors[i];
+		console.error(err.strMsg);
+	}
 	var dc_int_dialog = flatten(psParse);
 	return dc_int_dialog;
 }
