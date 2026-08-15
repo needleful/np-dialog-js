@@ -45,6 +45,10 @@ for(let k in Tok) {
 }
 Object.freeze(TokNames);
 
+function readableTk(strText, tk) {
+	return [strText.substr(tk.intStart, tk.intLength), TokNames[tk.tokType]];
+}
+
 // Creates an array of Token (prefix: tk)
 function tokenize(strText) {
 	let intC = 0;
@@ -95,69 +99,70 @@ function tokenize(strText) {
 	}
 	function matchesString(tokType, strMatch, bSkipSpace = true) {
 		if(!isGood()) {
-			return false;
+			return null;
 		}
 		var start = intC;
 		if(bSkipSpace) skipWhiteSpace();
 		if(strLower.startsWith(strMatch, intC)) {
 			pushTextTk(tokType, strMatch);
-			return true;
+			return strMatch;
 		}
 		else {
 			intC = start;
-			return false;
+			return null;
 		}
 	}
 	function matchesOneOf(tokType, a_strMatches) {
 		if(!isGood()) {
-			return false;
+			return null;
 		}
 		var start = intC;
 		for(let i = 0; i < a_strMatches.length; i++) {
 			if(findString(tokType, a_strMatches[i], i)) {
-				return true;
+				return a_strMatches[i];
 			}
 		}
 		intC = start;
-		return false;
+		return null;
 	}
 	function matchesRegex(tokType, rxMatch, bSkipSpace = true) {
 		if(!isGood()) {
-			return false;
+			return null;
 		}
 		var start = intC;
 		if(bSkipSpace) skipWhiteSpace();
 		let m = strText.substr(intC).match(rxMatch);
 		if(m) {
 			pushTextTk(tokType, m[0]);
-			return true;
+			return m[0];
 		}
 		else {
 			intC = start;
-			return false;
+			return null;
 		}
 	}
+
+	function matchesIdentifer() {
+		return matchesRegex(Tok.exIdentifier, /^\p{Alpha}[\p{Alpha}\d_]*\b/u);
+	}
+	function matchesDynVar() {
+		return matchesRegex(Tok.exDynamicVar, /^\$\p{Alpha}[\-'+\p{Alpha}\d_]*\b/u)
+	}
+	function matchesRawValue() {
+		return matchesRegex(Tok.exRawValue, /^\#[^\]\|]+/);
+	}
+	function matchesOp() {
+		return matchesRegex(Tok.exOp, /^[+\-=/\\|?<>&%$!@:]+/);
+	}
 	function tokenizeExpression() {
-		function grabIdentifer() {
-			return matchesRegex(Tok.exIdentifier, /^\p{Alpha}[\p{Alpha}\d_]*\b/u);
-		}
-		function grabDynVar() {
-			return matchesRegex(Tok.exDynamicVar, /^\$\p{Alpha}[\-'+\p{Alpha}\d_]*\b/u)
-		}
-		function grabRawValue() {
-			return matchesRegex(Tok.exRawValue, /^\#[^\]\|]+/);
-		}
-		function grabOp() {
-			return matchesRegex(Tok.exOp, /^[+\-=/\\|?<>&%$!@:]+/);
-		}
 		var intStart = intC;
 		// Optional starting operator
-		grabOp();
+		matchesOp();
 		// Required starting identifier or sub-expression
 		var bValid = (matchesString(Tok.exStart, '[')
-			|| grabIdentifer()
-			|| grabDynVar()
-			|| grabRawValue()
+			|| matchesIdentifer()
+			|| matchesDynVar()
+			|| matchesRawValue()
 		);
 		if(!bValid) {
 			if(matchesString(Tok.exStart, '[')) {
@@ -169,8 +174,8 @@ function tokenize(strText) {
 		}
 		// Function head
 		while(isGood()) {
-			if(grabIdentifer()) continue;
-			if(grabOp())
+			if(matchesIdentifer()) continue;
+			if(matchesOp())
 				break;
 			if(matchesString(Tok.exEnd, ']')) {
 				return;
@@ -183,8 +188,8 @@ function tokenize(strText) {
 		// Function arguments
 		while(isGood()) {
 			if(matchesString(Tok.exArgSplit, '|')
-				|| grabDynVar()
-				|| grabRawValue()
+				|| matchesDynVar()
+				|| matchesRawValue()
 				|| matchesRegex(Tok.exText, /^[^\]\\|]+/)
 			) {
 				continue;
@@ -197,6 +202,13 @@ function tokenize(strText) {
 				return;
 			}
 			matchesRegex(Tok.invalid, /^./);
+		}
+	}
+
+	function tokenizeLabel() {
+		if(!matchesIdentifer()){
+			pushErrorTk('TK: Expected identifier after {:} for label.', matchesRegex(Tok.invalid, /^./));
+			return;
 		}
 	}
 
@@ -216,6 +228,10 @@ function tokenize(strText) {
 			}
 			indentation = intSkipped;
 
+			if(matchesString(Tok.symLabel, ':')) {
+				tokenizeLabel();
+				continue;
+			}
 			if(matchesString(Tok.symNarration, '*')
 				|| matchesRegex(Tok.symSpeaker, /^[^\s-[\]]+\s*--/)
 				|| matchesRegex(Tok.comment, /^\/\/[^\n]*/)
@@ -326,10 +342,12 @@ function parse(strText, a_tkTokens) {
 		a_errors: [],
 	};
 	function pushTkError(strMsg, tk) {
-		console.error(strMsg, tk);
+		var tkReadable = readableTk(strText, tk);
+		console.error(strMsg, tkReadable);
 		psRoot.a_errors.push({
 			strMsg: strMsg,
-			tkSource: tk
+			tkSource: tk,
+			tkReadable: tkReadable
 		});
 	}
 
@@ -423,9 +441,34 @@ function parse(strText, a_tkTokens) {
 		}
 		return validate();
 	}
+	function parseLabel() {
+		var label = {
+			strFunctor: undefined,
+			a_varArgs: [],
+			a_conditions: [],
+			strBlockName: undefined, 
+		};
+		var s = peek();
+		if(s.tokType != Tok.exIdentifier) {
+			pushTkError('PS: Expected an identifier after {:}', s);
+		}
+		else {
+			pop();
+			label.strFunctor = tkText(s);
+		}
+		var nl = peek();
+		if(nl.tokType != Tok.newLine) {
+			pushTkError('PS: Expected a newline after label declaration', s);
+		}
+		else {
+			pop();
+		}
+		return label;
+	}
 	var psParent = psRoot;
 	var intLine = 0;
 	var indent = 0;
+	var a_labels = [];
 	while(isGood()) {
 		var item = {
 			type: ItemType.message,
@@ -434,7 +477,7 @@ function parse(strText, a_tkTokens) {
 			a_conditions: [],
 			strSpeaker: '',
 			a_psChildren: [],
-			a_strLabels: [],
+			a_labels: [],
 			intIndent: indent,
 			intLine: intLine
 		};
@@ -462,6 +505,14 @@ function parse(strText, a_tkTokens) {
 			case Tok.symOption:
 				item.type = ItemType.option;
 				break;
+			case Tok.symSpeaker:
+				var s = tkText(tkNext);
+				var l = s.length - 2;
+				item.strSpeaker = s.substr(0, l).trim();
+				break;
+			case Tok.symLabel:
+				a_labels.push(parseLabel());
+				break;
 			case Tok.markItalics:
 				bItalics = tagFlip(!bItalics, 'i');
 				break;
@@ -478,18 +529,15 @@ function parse(strText, a_tkTokens) {
 			case Tok.unindent:
 				item.intIndent = tkNext.intLength;
 				break;
-			case Tok.symSpeaker:
-				var s = tkText(tkNext);
-				var l = s.length - 2;
-				item.strSpeaker = s.substr(0, l).trim();
-				break;
 			case Tok.exStart:
 				item.a_conditions.push(parseExpression());
 				break;
 			}
 		}
-		//console.log('Indentation: ', item.a_varText, item.intIndent);
+
 		if(item.a_varText.length || item.a_conditions.length){
+			item.a_labels = a_labels;
+			a_labels = [];
 			if(item.intIndent > indent) {
 				var l = psParent.a_psChildren.length - 1;
 				if(l >= 0) {
@@ -509,9 +557,10 @@ function parse(strText, a_tkTokens) {
 	return psRoot;
 }
 
-// Dictionary of integers to finalized DialogItems (prefix: dia)
+// A dialog sequence (prefix: seq)
 function flatten(psParse) {
 	var dc_int_dialog = {};
+	var dc_str_labels= {};
 
 	function flatten_recurse(psParse) {
 		var intPrev = -1;
@@ -527,6 +576,10 @@ function flatten(psParse) {
 				strSpeaker: psChild.strSpeaker,
 				type: psChild.type
 			};
+			for(let l = 0; l < psChild.a_labels.length; l++) {
+				var label = psChild.a_labels[l];
+				dc_str_labels[label.strFunctor] = psChild.intLine;
+			}
 
 			dc_int_dialog[psChild.intLine] = diaNode;
 
@@ -542,12 +595,16 @@ function flatten(psParse) {
 		}
 	}
 	flatten_recurse(psParse);
-	return dc_int_dialog;
+	return {
+		dc_int_dialog: dc_int_dialog,
+		dc_str_labels: dc_str_labels,
+		intStart: 0
+	};
 }
 
 // Returns a dictionary
 /*	{
-		dc_str_intLabels,
+		dc_str_labels,
 		dc_int_dialog,
 		intStart
 	}
@@ -558,9 +615,7 @@ function compile(strText) {
 	var readableTokens = [];
 	for(var t = 0; t < a_tkTokens.length; t++){
 		var tk = a_tkTokens[t];
-		readableTokens.push(
-			[strText.substr(tk.intStart, tk.intLength), TokNames[tk.tokType]]
-		);
+		readableTokens.push(readableTk(strText, tk));
 	}
 	console.log(readableTokens);
 	var psParse = parse(strText, a_tkTokens);
@@ -568,11 +623,7 @@ function compile(strText) {
 		var err = psParse.a_errors[i];
 		console.error(err.strMsg);
 	}
-	var seqResult = {
-		dc_int_dialog: flatten(psParse),
-		dc_str_intLabels: {},
-		intStart: 0
-	}
+	var seqResult = flatten(psParse);
 	return seqResult;
 }
 
