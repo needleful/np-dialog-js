@@ -1,8 +1,52 @@
 <html>
 	<head>
 		<title>NP-Dialog Tests</title>
-		<script type='module' src='/'></script>
+		<script type='module' src='../compiler.js'></script>
 	</head>
 	<body>
+		<h1>NP-Dialog Tests</h1>
+		<button onclick='runTests()'>Run Tests</button>
+		<div id='test-results'>
+		</div>
 	</body>
+	<script type='module'>
+		// See compiler.js for notes on Hungarian notation used throughout code.
+		import * as Dialog from '../compiler.js';
+
+		// Return a dictionary:
+		// {
+		//	bSuccess: true if the code could run without error,
+		//	strText: A string representation of the result 
+		// }
+		const result = document.getElementById('test-results');
+		function clearText() {
+			result.innerText = '';
+		}
+		function appendText(strMessage, strElemType='p', elemParent=null) {
+			if(!elemParent) {
+				elemParent = result;
+			}
+			var elemNew = document.createElement(strElemType);
+			elemParent.appendChild(elemNew);
+			elemNew.innerText = strMessage;
+			return elemNew;
+		}
+		async function test(strPath) {
+			appendText(strPath, 'h2');
+			const response = await fetch(strPath, {cache: 'no-store'});
+			if(!response.ok) {
+				appendText('FAILED! Could not load file!');
+				return false;
+			}
+			var strText = await response.text();
+			var dc_int_diaTree = Dialog.compile(strText.replaceAll('\r', '\n'));
+			appendText(JSON.stringify(dc_int_diaTree));
+		}
+		export async function runTests() {
+			clearText();
+			await test('00_messages.dialog');
+			await test('01_conditions.dialog');
+		}
+		window.runTests = runTests;
+	</script>
 </html>
