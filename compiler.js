@@ -7,7 +7,7 @@
 // a_X: Array of X, dc_X_Y: Dictionary of X key to Y value
 // Other prefixes will be specified with the constructor function.
 
-const name = 'np_dialog';
+const name = 'np_dialog_compiler';
 
 const Tok = {
 	invalid: 0,
@@ -19,6 +19,8 @@ const Tok = {
 
 	symNarration: 10,
 	symSpeaker: 11,
+	symLabel: 12,
+	symOption: 13,
 
 	markEscape: 20,
 	markItalics: 21,
@@ -34,7 +36,7 @@ const Tok = {
 	exText: 36,
 	exRawValue: 37,
 	exDynamicVar: 38,
-	exEscape: 40
+	exEscape: 39
 };
 
 let TokNames = {};
@@ -95,12 +97,14 @@ function tokenize(strText) {
 		if(!isGood()) {
 			return false;
 		}
+		var start = intC;
 		if(bSkipSpace) skipWhiteSpace();
 		if(strLower.startsWith(strMatch, intC)) {
 			pushTextTk(tokType, strMatch);
 			return true;
 		}
 		else {
+			intC = start;
 			return false;
 		}
 	}
@@ -108,17 +112,20 @@ function tokenize(strText) {
 		if(!isGood()) {
 			return false;
 		}
+		var start = intC;
 		for(let i = 0; i < a_strMatches.length; i++) {
 			if(findString(tokType, a_strMatches[i], i)) {
 				return true;
 			}
 		}
+		intC = start;
 		return false;
 	}
 	function matchesRegex(tokType, rxMatch, bSkipSpace = true) {
 		if(!isGood()) {
 			return false;
 		}
+		var start = intC;
 		if(bSkipSpace) skipWhiteSpace();
 		let m = strText.substr(intC).match(rxMatch);
 		if(m) {
@@ -126,6 +133,7 @@ function tokenize(strText) {
 			return true;
 		}
 		else {
+			intC = start;
 			return false;
 		}
 	}
@@ -211,6 +219,7 @@ function tokenize(strText) {
 			if(matchesString(Tok.symNarration, '*')
 				|| matchesRegex(Tok.symSpeaker, /^[^\s-[\]]+\s*--/)
 				|| matchesRegex(Tok.comment, /^\/\/[^\n]*/)
+				|| matchesString(Tok.symOption, '>')
 			) {
 				intState = 1;
 				continue;
@@ -222,22 +231,21 @@ function tokenize(strText) {
 				continue;
 			}
 		}
+		else if(matchesString(Tok.markInterpolate, '[')) {
+			tokenizeExpression();
+			continue;
+		}
 		if(matchesString(Tok.markEscape, '\\')) {
 			if(isGood()) { 
 				pushTk(Tok.textPlain, 1);
 			}
 			continue;
 		}
-		if(matchesString(Tok.markInterpolate, '#[')) {
-			tokenizeExpression();
-			intState = 2;
-			continue;
-		}
 		if(matchesString(Tok.markItalics, '/')
 			|| matchesString(Tok.markBold, '_')
 			|| matchesString(Tok.markStrike, '~')
 			|| matchesString(Tok.textPlain, '#')
-			|| matchesRegex(Tok.textPlain, /^[^\n\/\\_#]+/)
+			|| matchesRegex(Tok.textPlain, /^[^\n\/\\_#\[\]]+/, false)
 		) {
 			intState = 2;
 			continue;
@@ -426,6 +434,7 @@ function parse(strText, a_tkTokens) {
 			a_conditions: [],
 			strSpeaker: '',
 			a_psChildren: [],
+			a_strLabels: [],
 			intIndent: indent,
 			intLine: intLine
 		};
@@ -450,6 +459,9 @@ function parse(strText, a_tkTokens) {
 			case Tok.symNarration:
 				item.type = ItemType.narration;
 				break;
+			case Tok.symOption:
+				item.type = ItemType.option;
+				break;
 			case Tok.markItalics:
 				bItalics = tagFlip(!bItalics, 'i');
 				break;
@@ -458,6 +470,9 @@ function parse(strText, a_tkTokens) {
 				break;
 			case Tok.markStrike:
 				bStrike = tagFlip(!bStrike, 'strike');
+				break;
+			case Tok.markInterpolate:
+				item.a_varText.push({expInterp: parseExpression()});
 				break;
 			case Tok.indent:
 			case Tok.unindent:
@@ -509,7 +524,8 @@ function flatten(psParse) {
 				intChild:-1,
 				a_varText: psChild.a_varText,
 				a_conditions: psChild.a_conditions,
-				strSpeaker: psChild.strSpeaker
+				strSpeaker: psChild.strSpeaker,
+				type: psChild.type
 			};
 
 			dc_int_dialog[psChild.intLine] = diaNode;
@@ -529,7 +545,14 @@ function flatten(psParse) {
 	return dc_int_dialog;
 }
 
-// Returns DialogItems from text
+// Returns a dictionary
+/*	{
+		dc_str_intLabels,
+		dc_int_dialog,
+		intStart
+	}
+	prefix: seq
+*/
 function compile(strText) {
 	var a_tkTokens = tokenize(strText);
 	var readableTokens = [];
@@ -545,8 +568,12 @@ function compile(strText) {
 		var err = psParse.a_errors[i];
 		console.error(err.strMsg);
 	}
-	var dc_int_dialog = flatten(psParse);
-	return dc_int_dialog;
+	var seqResult = {
+		dc_int_dialog: flatten(psParse),
+		dc_str_intLabels: {},
+		intStart: 0
+	}
+	return seqResult;
 }
 
-export {name, compile};
+export {name, compile, ItemType};

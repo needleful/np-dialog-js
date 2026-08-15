@@ -13,6 +13,7 @@
 	<script type='module'>
 		// See compiler.js for notes on Hungarian notation used throughout code.
 		import * as Dialog from '../compiler.js';
+		import * as DialogView from '../display.js';
 
 		// Return a dictionary:
 		// {
@@ -23,31 +24,23 @@
 		function clearText() {
 			result.innerText = '';
 		}
-		function appendText(strMessage, strElemType='p', elemParent=null) {
-			if(!elemParent) {
-				elemParent = result;
-			}
-			var elemNew = document.createElement(strElemType);
-			elemParent.appendChild(elemNew);
-			elemNew.innerText = strMessage;
-			return elemNew;
-		}
 		async function test(strPath) {
-			appendText(strPath, 'h2');
+			DialogView.addChild(result, strPath, 'h2');
 			const response = await fetch(strPath, {cache: 'no-store'});
 			if(!response.ok) {
-				appendText('FAILED! Could not load file!');
+				DialogView.addChild(result, 'FAILED! Could not load file!');
 				return false;
 			}
 			var strText = await response.text();
-			var dc_int_diaTree = Dialog.compile(strText.replaceAll('\r', '\n'));
-			appendText(JSON.stringify(dc_int_diaTree));
+			var seqDialog = Dialog.compile(strText.replaceAll('\r', ''));
+			DialogView.displayDebug(result, seqDialog);
 		}
 		export async function runTests() {
 			clearText();
 			await test('00_messages.dialog');
 			await test('01_conditions.dialog');
 			await test('02_errors.dialog');
+			await test('03_labels.dialog');
 		}
 		window.runTests = runTests;
 	</script>
