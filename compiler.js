@@ -181,6 +181,7 @@ function parse(strText, a_tkTokens) {
 	};
 	var psParent = psRoot;
 	var intLine = 0;
+	var indent = 0;
 	while(isGood()) {
 		var item = {
 			type: ItemType.message,
@@ -189,7 +190,7 @@ function parse(strText, a_tkTokens) {
 			a_conditions: [],
 			strSpeaker: '',
 			a_psChildren: [],
-			intIndent: psParent.intIndent,
+			intIndent: indent,
 			intLine: intLine
 		};
 		var bNext = false;
@@ -228,8 +229,9 @@ function parse(strText, a_tkTokens) {
 				break;
 			}
 		}
+		console.log('Indentation: ', item.a_varText, item.intIndent);
 		if(item.a_varText.length || item.a_conditions.length){
-			if(item.intIndent > psParent.intIndent) {
+			if(item.intIndent > indent) {
 				var l = psParent.a_psChildren.length - 1;
 				if(l >= 0) {
 					psParent = psParent.a_psChildren[l];
@@ -238,12 +240,13 @@ function parse(strText, a_tkTokens) {
 					console.error('Duplicate indentation?');
 				}
 			}
-			else while(item.intIndent < psParent.intIndent && psParent.psParent) {
+			else while(item.intIndent <= psParent.intIndent && psParent.psParent) {
 				psParent = psParent.psParent;
 			}
 			psParent.a_psChildren.push(item);
 			item.psParent = psParent;
 			intLine++;
+			indent = item.intIndent;
 		}
 	}
 
@@ -254,30 +257,30 @@ function parse(strText, a_tkTokens) {
 function flatten(psParse) {
 	var dc_int_dialog = {};
 
-	// Return parent dialog node's index
 	function flatten_recurse(psParse) {
-		var diaNode = {
-			intNext:-1,
-			intParent: -1,
-			intChild:-1,
-			a_varText: psParse.a_varText,
-			a_conditions: psParse.a_conditions,
-		};
-		if(psParse.a_psChildren.length > 0) {
-			diaNode.intChild = psParse.a_psChildren[0].intLine;
-		}
-		dc_int_dialog[psParse.intLine] = diaNode;
-
 		var intPrev = -1;
 		for(let i = 0; i < psParse.a_psChildren.length; i++) {
-			var psNext = psParse.a_psChildren[i];
+			var psChild = psParse.a_psChildren[i];
+			var diaNode = {
+				intNext:-1,
+				intParent: psParse.intLine,
+				intChild:-1,
+				a_varText: psChild.a_varText,
+				a_conditions: psChild.a_conditions,
+			};
+
+			dc_int_dialog[psChild.intLine] = diaNode;
+
 			if(intPrev >= 0) {
-				dc_int_dialog[intPrev].intNext = psNext.intLine;
+				dc_int_dialog[intPrev].intNext = psChild.intLine;
 			}
-			intPrev = flatten_recurse(psNext);
-			dc_int_dialog[intPrev].intParent = psParse.intLine;
+			intPrev = psChild.intLine;
+
+			if(psChild.a_psChildren.length > 0) {
+				diaNode.intChild = psChild.a_psChildren[0].intLine;
+				flatten_recurse(psChild);
+			}
 		}
-		return psParse.intLine;
 	}
 	flatten_recurse(psParse);
 	return dc_int_dialog;
