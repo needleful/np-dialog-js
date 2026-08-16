@@ -885,7 +885,7 @@ function toJS(seqInput, strName) {
 		);
 		a_strCode.push(`\taddText: ${textToJs(seqInput, dialog)},`);
 		a_strCode.push(`\tcanEnter: ${condToJs(seqInput, dialog)},`)
-		a_strCode.push('}');
+		a_strCode.push('},');
 	}
 
 	a_strCode.push('}');
