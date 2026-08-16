@@ -468,6 +468,20 @@ function parse(strText, a_tkTokens) {
 		}
 		return validate();
 	}
+	function exIsOtherwise(exParsed) {
+		if(exParsed.a_head.length == 1 
+			&& exParsed.a_head[0] == 'otherwise'
+		) {
+			if(exParsed.a_tail.length) {
+				console.warn(
+					'Using {otherwise} as a function. Is this intentional?',
+					exParsed);
+				return false;
+			}
+			return true;
+		}
+		return false;
+	}
 	function parseLabel() {
 		var label = {
 			strFunctor: undefined,
@@ -506,7 +520,9 @@ function parse(strText, a_tkTokens) {
 			a_psChildren: [],
 			a_labels: [],
 			intIndent: indent,
-			intLine: intLine
+			intLine: intLine,
+			// otherwise is not a function, but a special control flow
+			otherwise: false
 		};
 		var bNext = false;
 		var bItalics = false;
@@ -561,8 +577,14 @@ function parse(strText, a_tkTokens) {
 				break;
 			}
 		}
-
-		if(item.a_varText.length || item.a_conditions.length){
+		// Filter out [otherwise], set a flag
+		item.a_conditions = item.a_conditions.filter(
+		(cond) => {
+			var r = exIsOtherwise(cond);
+			if(r) {item.otherwise = true;}
+			return !r;
+		});
+		if(item.a_varText.length || item.a_conditions.length || item.otherwise){
 			item.a_labels = a_labels;
 			a_labels = [];
 			if(item.intIndent > indent) {
@@ -601,7 +623,8 @@ function flatten(psParse) {
 				a_varText: psChild.a_varText,
 				a_conditions: psChild.a_conditions,
 				strSpeaker: psChild.strSpeaker,
-				type: psChild.type
+				type: psChild.type,
+				otherwise: psChild.otherwise
 			};
 			for(let l = 0; l < psChild.a_labels.length; l++) {
 				var label = psChild.a_labels[l];
@@ -811,9 +834,6 @@ function textToJs(seqInput, dialog) {
 	var a_strCode = [
 		`(e) => { e.classList.add('${cls}')`
 	];
-	function compileElement() {
-
-	}
 	var tagStack = [];
 	var workingElemDefined = false;
 	for(let i = 0; i < dialog.a_varText.length; i++) {
@@ -876,6 +896,19 @@ function toJS(seqInput, strName) {
 		a_strCode.push(`\t${quote(label)}: ${intVal},`);
 	}
 	a_strCode.push('},')
+	function diaGet(intId) {
+		return seqInput.dc_int_dialog[intId];
+	}
+	function firstWithoutOtherwise(intNext){
+		while(intNext >= 0) {
+			var diaNext = diaGet(intNext);
+			if(!diaNext.otherwise) {
+				break;
+			}
+			intNext = diaNext.intNext;
+		}
+		return intNext;
+	}
 
 	for(var intIdx in seqInput.dc_int_dialog) {
 		var dialog = seqInput.dc_int_dialog[intIdx];
@@ -885,24 +918,31 @@ function toJS(seqInput, strName) {
 		var intEntered = -1;
 		var intSkipped = -1;
 		if(dialog.intChild >= 0) {
+			var diaChild = diaGet(dialog.intChild);
+			if(diaChild.otherwise) {
+				console.error('First dialog item cannot use [otherwise]', diaChild);
+			}
 			intEntered = dialog.intChild;
 		}
 		
 		if(dialog.intNext >= 0) {
-			if(intEntered < 0) intEntered = dialog.intNext;
+			if(intEntered < 0)
+				intEntered = firstWithoutOtherwise(dialog.intNext);
 			intSkipped = dialog.intNext;
 		}
 		else {
 			var intParent = dialog.intParent;
 			while(intParent >= 0) {
-				var diaParent = seqInput.dc_int_dialog[intParent];
+				var diaParent = diaGet(intParent);
 				if(!diaParent) {
 					break;
 				}
-				if(diaParent.intNext >= 1) {
+
+				var intParentNext = firstWithoutOtherwise(diaParent.intNext);
+				if(intParentNext >= 0) {
 					if(intEntered < 0) 
-						intEntered = diaParent.intNext;
-					intSkipped = diaParent.intNext;
+						intEntered = intParentNext;
+					intSkipped = intParentNext;
 					break
 				}
 				else {
