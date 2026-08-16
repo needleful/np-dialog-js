@@ -160,14 +160,20 @@ function tokenize(strText) {
 		// Optional starting operator
 		matchesOp();
 		// Required starting identifier or sub-expression
-		var bValid = (matchesString(Tok.exStart, '[')
-			|| matchesIdentifer()
-			|| matchesDynVar()
-			|| matchesRawValue()
-		);
+		var bValid = false;
+		if(matchesString(Tok.exStart, '[')) {
+			tokenizeExpression();
+			bValid = true;
+		}
+		else {
+			bValid = (
+				matchesIdentifer()
+				|| matchesDynVar()
+				|| matchesRawValue()
+			);
+		}
 		if(!bValid) {
 			if(matchesString(Tok.exStart, '[')) {
-				tokenizeExpression();
 			}
 			else {
 				pushErrorTk('Could not parse expression: no starting identifier', '', intStart);
@@ -191,7 +197,7 @@ function tokenize(strText) {
 			if(matchesString(Tok.exArgSplit, '|')
 				|| matchesDynVar()
 				|| matchesRawValue()
-				|| matchesRegex(Tok.exText, /^[^\]\\|]+/)
+				|| matchesRegex(Tok.exText, /^[^\[\]\\|]+/)
 			) {
 				continue;
 			}
@@ -219,7 +225,7 @@ function tokenize(strText) {
 	var intState = 0;
 	var indentation = 0;
 	while(isGood()){
-		if(intState < 1) {
+		if(intState == 0) {
 			var intSkipped = skipWhiteSpace();
 			if(intSkipped > indentation) {
 				pushTk(Tok.indent, intSkipped, intC - intSkipped);
@@ -228,7 +234,10 @@ function tokenize(strText) {
 				pushTk(Tok.unindent, intSkipped, intC - intSkipped);
 			}
 			indentation = intSkipped;
-
+			intState = 1;
+			continue;
+		}
+		if(intState < 2) {
 			if(matchesString(Tok.symLabel, ':')) {
 				tokenizeLabel();
 				continue;
@@ -238,11 +247,11 @@ function tokenize(strText) {
 				|| matchesRegex(Tok.comment, /^\/\/[^\n]*/)
 				|| matchesString(Tok.symOption, '>')
 			) {
-				intState = 1;
+				intState = 2;
 				continue;
 			}
 		}
-		if(intState < 2) {
+		if(intState < 3) {
 			if(matchesString(Tok.exStart, '[')) {
 				tokenizeExpression();
 				continue;
@@ -264,13 +273,14 @@ function tokenize(strText) {
 			|| matchesString(Tok.textPlain, '#')
 			|| matchesRegex(Tok.textPlain, /^[^\n\/\\_#\[\]]+/, false)
 		) {
-			intState = 2;
+			intState = 3;
 			continue;
 		}
 		if(matchesRegex(Tok.newLine, /^\n+/)) {
 			intState = 0;
 			continue;
 		}
+		matchesRegex(Tok.invalid, /^./);
 	}
 	return a_tkResult;
 }
