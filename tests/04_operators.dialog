@@ -1,0 +1,3 @@
+[[talked = #0] || [talked = #1]]
+//	The first two times you talked to me.
+//	[game status += #1 | [game get_info: count]]

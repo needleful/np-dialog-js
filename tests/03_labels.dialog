@@ -1,0 +1,4 @@
+:start
+Hello!
+This dialog will repeat.
+[goto: start]

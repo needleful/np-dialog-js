@@ -149,7 +149,8 @@ function tokenize(strText) {
 		return matchesRegex(Tok.exDynamicVar, /^\$\p{Alpha}[\-'+\p{Alpha}\d_]*\b/u)
 	}
 	function matchesRawValue() {
-		return matchesRegex(Tok.exRawValue, /^\#[^\]\|]+/);
+		// TODO: a recursive tokenization to allow for nested structures
+		return matchesRegex(Tok.exRawValue, /^\#[^\]\|\:]+/);
 	}
 	function matchesOp() {
 		return matchesRegex(Tok.exOp, /^[+\-=/\\|?<>&%$!@:]+/);
@@ -279,6 +280,11 @@ const ItemType = {
 	narration: 1,
 	option: 2
 };
+const ItemTypeNames = {
+	0: 'message',
+	1: 'narration',
+	2: 'option'
+};
 
 const OpFlags = {
 	prefix: 1,
@@ -299,23 +305,34 @@ const Operators = {
 	'!': OpFlags.prefix,
 	'?': OpFlags.postfix,
 	':': OpFlags.infix,
-	'=': OpFlags.infix,
-	'!=': OpFlags.infix,
 	':=': OpFlags.infix,
+	'=': OpFlags.infix,
+	'>': OpFlags.infix,
+	'<': OpFlags.infix,
+	'<=': OpFlags.infix,
+	'>=': OpFlags.infix,
+	'!=': OpFlags.infix,
 	'+=': OpFlags.infix,
 	'-=': OpFlags.infix,
 	'/=': OpFlags.infix,
 	'*=': OpFlags.infix,
+	'%': OpFlags.infix,
+	'%=': OpFlags.infix,
+	'&': OpFlags.infix,
 	'&=': OpFlags.infix,
+	'&&': OpFlags.infix,
+	'&&=': OpFlags.infix,
 	'|= ': OpFlags.infix,
+	'||= ': OpFlags.infix,
 	'+': OpFlags.infix | OpFlags.prefix,
 	'-': OpFlags.infix | OpFlags.prefix,
 	'*': OpFlags.infix,
 	'/': OpFlags.infix,
-	'&': OpFlags.infix,
 	'|': OpFlags.infix,
+	'||': OpFlags.infix,
 	'@': OpFlags.infix,
 };
+
 
 // Returns an tree of ParseNode (prefix: ps)
 function parse(strText, a_tkTokens) {
@@ -627,4 +644,242 @@ function compile(strText) {
 	return seqResult;
 }
 
-export {name, compile, ItemType};
+function quote(strText) {
+	return '"' + strText.replaceAll('"', '\\"') + '"';
+}
+
+const OpRemap = {
+	':=': '=',
+	'=': '=='
+};
+
+// Operators that can be chained
+const OpChained = [
+	'+',
+	'=',
+	'-',
+	'/',
+	'&&',
+	'&',
+	'|',
+	'||',
+	'%'
+];
+
+// Operators that are NOT just another operator plus assignment
+// Which is assumed the default for any multi-char op ending in '=' 
+const OpUniqueEq = [
+	'!=',
+	'==',
+	'>=',
+	'<=',
+];
+
+// Requires rewriting `x == y == z` as `x == y && x == z`
+const OpBoolChain = [
+	'==',
+	'!=',
+	'>',
+	'<',
+];
+
+function contains(array, value) {
+	return array.indexOf(value) >= 0;
+}
+
+function opToJS(strOp, strHead, a_strTail) {
+	if(strOp == ':') {
+		return strHead + `(${a_strTail.join(', ')})`;
+	}
+	if(strOp == '@') {
+		return strHead + `[${a_strTail.join(', ')}]`;
+	}
+	if(strOp in OpRemap) {
+		strOp = OpRemap[strOp];
+	}
+	var trueOp = strOp;
+	// Strip op-assignment
+	if(strOp.length > 1 && strOp.endsWith('=') && !contains(OpUniqueEq, strOp)) {
+		strOp = strOp.substr(0, strOp.length - 1);
+	}
+	var strTailSub = '';
+	var strStart = strHead + trueOp;
+	if(strOp in OpChained) {
+		strTailSub = a_strTail.join(' ' + strOp + ' ');
+	}
+	else if(contains(OpBoolChain, strOp)) {
+		// Much simpler case
+		if(a_strTail.length == 1) {
+			strTailSub = a_strTail[0];
+		}
+		else {
+			// Assign to a temporary variable
+			strStart += `(__temp = (${strHead})), __temp ` + trueOp
+			var s = [];
+			for(let t = 0; t < a_strTail.length; t++) {
+				s.push(`(__temp ${strOp} ${a_strTail[t]})`);
+			}
+			strTailSub = s.join(' && ')
+		}
+	}
+	return strStart + strTailSub;
+}
+
+function expToJS(seqInput, exp) {
+	var a_strHead = [];
+	for(let h = 0; h < exp.a_head.length; h++) {
+		var expData = exp.a_head[h];
+		if(typeof(expData) == 'string') {
+			if(!a_strHead.length) {
+				a_strHead.push('ctx');
+			}
+			a_strHead.push(expData);
+		}
+		else if('strVar' in expData) {
+			if(!a_strHead.length) {
+				a_strHead.push('ctx');
+			}
+			else {
+				console.error('Cannot use dynamic variables ($var) as a field.');
+			}
+			a_strHead.push(`_vars[${quote(expData.strVar)}]`);
+		}
+		else if('strRaw' in expData) {
+			a_strHead.push(`(${expData.strRaw.substr(1)})`);
+		}
+		else if('a_head' in expData) {
+			a_strHead.push(`(${expToJS(seqInput, expData)})`);
+		}
+	}
+	var a_strTail = [];
+	for(let t = 0; t < exp.a_tail.length; t++) {
+		var expTail = exp.a_tail[t];
+		if(typeof(expTail) == 'string') {
+			a_strTail.push(quote(expTail));
+		}
+		else if('strVar' in expTail) {
+			a_strTail.push(`ctx._vars[${quote(expTail.strVar)}]`);
+		}
+		else if('strRaw' in expTail) {
+			a_strTail.push(`(${expTail.strRaw.substr(1)})`);
+		}
+		else if('a_head' in expTail) {
+			a_strTail.push(`(${expToJS(seqInput, expTail)})`);
+		}
+	}
+	var strCode = a_strHead.join('.');
+	if(!a_strTail.length) {
+		// Only postfix operator is {?},
+		// which turns a function call into a variable access
+		if(!exp.strEndOp) {
+			strCode += '()';
+		}
+	}
+	else if(exp.strEndOp) {
+		// Infix Operators
+		var strOp = exp.strEndOp;
+		strCode = opToJS(strOp, strCode, a_strTail)
+	}
+
+	// Prefix operator has highest precedence
+	if(exp.strStartOp == '+') {
+		return `math.abs(${strCode})`;
+	}
+	else if(exp.strStartOp) {
+		return `${exp.strStartOp}(${strCode})`;
+	}
+	return strCode;
+}
+
+// A list of dialog options turned into javascript
+function textToJs(seqInput, dialog) {
+	if (!dialog.a_varText.length){
+		return 'null';
+	}
+	var cls = 'dia-' + ItemTypeNames[dialog.type];
+
+	var a_strCode = [
+		`(e) => { e.classList.add('${cls}')`
+	];
+	function compileElement() {
+
+	}
+	var tagStack = [];
+	var workingElemDefined = false;
+	for(let i = 0; i < dialog.a_varText.length; i++) {
+		var txt = dialog.a_varText[i];
+		if(typeof(txt) == 'string') {
+			a_strCode.push(`datxt(e, ${quote(txt)})`);
+			continue;
+		}
+		else if('tagStart' in txt) {
+			tagStack.push(txt.tagStart);
+			if(!workingElemDefined) {
+				a_strCode.push(`var _we = document.createElement('${txt.tagStart}')`);
+				workingElemDefined = true;
+			}
+			else {
+				a_strCode.push(`_we = document.createElement('${txt.tagStart}')`);
+			}
+			a_strCode.push('e.appendChild(_we); e = _we');
+		}
+		else if('tagEnd' in txt) {
+			var tag = txt.tagEnd;
+			var realTag = tagStack.pop();
+			if(tag != realTag) {
+				console.error('Unexpected end tag: ', tag);
+			}
+			a_strCode.push(`e = e.parentElement`);
+		}
+		else if('expInterp' in txt) {
+			a_strCode.push(`datxt(e, String(${expToJS(seqInput, txt.expInterp)}))`)
+		}
+		else {
+			a_strCode.push('//todo: '+ JSON.stringify(txt));
+		}
+	}
+	a_strCode.push('}')
+	return a_strCode.join(';\n');
+}
+
+function condToJs(seqInput, dialog) {
+	if(!dialog.a_conditions.length) {
+		return 'always';
+	}
+	var a_strCode = ['(ctx) => '];
+	var a_strConds = []
+	for(let c = 0; c < dialog.a_conditions.length; c++) {
+		var cond = dialog.a_conditions[c];
+		a_strConds.push(`(${expToJS(seqInput, cond)})`);
+	}
+	a_strCode.push(a_strConds.join(' && '));
+	return a_strCode.join('');
+}
+
+// Returns javascript source code.
+function toJS(seqInput, strName) {
+	var a_strCode = [strName, ' = {',
+		'dc_str_labels: {'
+	];
+	for(var label in seqInput.dc_str_labels) {
+		var intVal = seqInput.dc_str_labels[label];
+		a_strCode.push(`\t${quote(label)}: ${intVal},`);
+	}
+	a_strCode.push('},')
+
+	for(var intIdx in seqInput.dc_int_dialog) {
+		var dialog = seqInput.dc_int_dialog[intIdx];
+		a_strCode.push(`${intIdx}: {`);
+		a_strCode.push(
+			`\tintNext: ${dialog.intNext}, intChild:${dialog.intChild}, intParent:${dialog.intParent},`
+		);
+		a_strCode.push(`\taddText: ${textToJs(seqInput, dialog)},`);
+		a_strCode.push(`\tcanEnter: ${condToJs(seqInput, dialog)},`)
+		a_strCode.push('}');
+	}
+
+	a_strCode.push('}');
+	return a_strCode.join('\n');
+}
+
+export {name, compile, toJS, ItemType};
