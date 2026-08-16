@@ -714,7 +714,7 @@ function opToJS(strOp, strHead, a_strTail) {
 	}
 	var strTailSub = '';
 	var strStart = strHead + trueOp;
-	if(strOp in OpChained) {
+	if(contains(OpChained, strOp)) {
 		strTailSub = a_strTail.join(' ' + strOp + ' ');
 	}
 	else if(contains(OpBoolChain, strOp)) {
