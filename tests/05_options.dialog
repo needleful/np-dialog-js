@@ -1,0 +1,11 @@
+// Replies
+Hello!
+> Hello.
+	How are you?
+	> [day going_well] I'm doing well.
+		Sorry to hear that, champ!
+	> [otherwise] Not so hot.
+		That's a shame!
+	> I'm fine.
+> Goodbye.
+	[exit]

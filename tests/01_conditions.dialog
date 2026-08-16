@@ -2,6 +2,8 @@
 	This is our first time talking.
 [otherwise]
 	This is our next time talking.
+	[talked > #1]
+		We've talked [talked?] times now.
 	[game good?]
 		Hello!
 	[otherwise][something else]

@@ -1,4 +1,5 @@
 :start
 Hello!
 This dialog will repeat.
-[goto: start]
+[!bored][goto: start]
+You're bored? How dare you!

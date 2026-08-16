@@ -1,4 +1,6 @@
 // This comment should be ignored.
 * This is narration.
 Hello! This is /text/.
-Person -- This is _some more_ text!
+Use things like \~\this\~\ to ~strike out~ characters.
+(You can use backslash (\\) to escape special characters!)
+Person -- This is _some more_ text! /~TErrible~ Amasing!/

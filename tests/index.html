@@ -33,17 +33,20 @@
 			}
 			var strText = await response.text();
 			var seqDialog = Dialog.compile(strText.replaceAll('\r', ''));
-			DialogView.displayDebug(result, seqDialog);
+
+			var elemJS = document.createElement('pre');
+			result.appendChild(elemJS);
 			var name = 'const dia' + strPath.replaceAll('.dialog', '');
-			console.log(Dialog.toJS(seqDialog, name));
+			elemJS.innerText = Dialog.toJS(seqDialog, name);
 		}
 		export async function runTests() {
 			clearText();
-			// await test('00_messages.dialog');
+			await test('00_messages.dialog');
 			await test('01_conditions.dialog');
-			// await test('02_errors.dialog');
-			// await test('03_labels.dialog');
-			// await test('04_operators.dialog');
+			await test('02_errors.dialog');
+			await test('03_labels.dialog');
+			await test('04_operators.dialog');
+			await test('05_options.dialog');
 		}
 		window.runTests = runTests;
 	</script>

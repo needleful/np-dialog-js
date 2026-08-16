@@ -271,7 +271,7 @@ function tokenize(strText) {
 			|| matchesString(Tok.markBold, '_')
 			|| matchesString(Tok.markStrike, '~')
 			|| matchesString(Tok.textPlain, '#')
-			|| matchesRegex(Tok.textPlain, /^[^\n\/\\_#\[\]]+/, false)
+			|| matchesRegex(Tok.textPlain, /^[^\n\/\\_#\[\]~]+/, false)
 		) {
 			intState = 3;
 			continue;
@@ -400,10 +400,6 @@ function parse(strText, a_tkTokens) {
 			}
 		}
 		var head = true;
-		if(peek().type == Tok.exOp) {
-			var leadOp = pop();
-			validateOp(leadOp, OpFlags.prefix);
-		}
 		var tkOp;
 		function validate() {
 			if(exResult.strEndOp) {
@@ -430,9 +426,15 @@ function parse(strText, a_tkTokens) {
 				exResult.a_head.push(parseExpression());
 				break;
 			case Tok.exOp:
-				tkOp = tk;
-				exResult.strEndOp = tkText(tk);
-				head = false;
+				if(!exResult.a_head.length) {
+					validateOp(tk, OpFlags.prefix);
+					exResult.strStartOp = tkText(tk);
+				}
+				else {
+					tkOp = tk;
+					exResult.strEndOp = tkText(tk);
+					head = false;	
+				}
 				break;
 			default:
 				head = false;
@@ -678,7 +680,7 @@ function compile(strText) {
 }
 
 function quote(strText) {
-	return '"' + strText.replaceAll('"', '\\"') + '"';
+	return '"' + strText.replaceAll('\\', '\\\\').replaceAll('"', '\\"') + '"';
 }
 
 const OpRemap = {
@@ -827,19 +829,34 @@ function expToJS(seqInput, exp) {
 // A list of dialog options turned into javascript
 function textToJs(seqInput, dialog) {
 	if (!dialog.a_varText.length){
-		return 'null';
+		return false;
 	}
-	var cls = 'dia-' + ItemTypeNames[dialog.type];
 
-	var a_strCode = [
-		`(e) => { e.classList.add('${cls}')`
-	];
+	var a_strCode = [`(ctx, display) => { //`];
+	if(dialog.type == ItemType.option) {
+		a_strCode.push("var e = display.addReplyButton()");
+	}
+	else {
+		var cls = 'dia-' + ItemTypeNames[dialog.type];
+		a_strCode.push(`var e = display.addMessage(); e.classList.add('${cls}')`);
+	}
+
+	if(dialog.type == ItemType.message) {
+		var codeSpeaker;
+		if(dialog.strSpeaker) {
+			codeSpeaker = quote('speaker-'+dialog.strSpeaker);
+		}
+		else {
+			codeSpeaker = '"speaker-"+ctx.defaultSpeaker';
+		}
+		a_strCode.push(`e.classList.add(${codeSpeaker})`);
+	}
 	var tagStack = [];
 	var workingElemDefined = false;
 	for(let i = 0; i < dialog.a_varText.length; i++) {
 		var txt = dialog.a_varText[i];
 		if(typeof(txt) == 'string') {
-			a_strCode.push(`datxt(e, ${quote(txt)})`);
+			a_strCode.push(`display.appendText(e, ${quote(txt)})`);
 			continue;
 		}
 		else if('tagStart' in txt) {
@@ -862,19 +879,19 @@ function textToJs(seqInput, dialog) {
 			a_strCode.push(`e = e.parentElement`);
 		}
 		else if('expInterp' in txt) {
-			a_strCode.push(`datxt(e, String(${expToJS(seqInput, txt.expInterp)}))`)
+			a_strCode.push(`display.appendTextOrElement(e, ${expToJS(seqInput, txt.expInterp)})`)
 		}
 		else {
 			a_strCode.push('//todo: '+ JSON.stringify(txt));
 		}
 	}
 	a_strCode.push('}')
-	return a_strCode.join(';\n');
+	return a_strCode.join(';\n\t\t');
 }
 
 function condToJs(seqInput, dialog) {
 	if(!dialog.a_conditions.length) {
-		return 'always';
+		return false;
 	}
 	var a_strCode = ['(ctx) => '];
 	var a_strConds = []
@@ -898,6 +915,9 @@ function toJS(seqInput, strName) {
 	a_strCode.push('},')
 	function diaGet(intId) {
 		return seqInput.dc_int_dialog[intId];
+	}
+	function isOption(dialog) {
+		return dialog.type == ItemType.option;
 	}
 	function firstWithoutOtherwise(intNext){
 		while(intNext >= 0) {
@@ -955,8 +975,15 @@ function toJS(seqInput, strName) {
 		a_strCode.push(
 			`\tnextOnEnter: ${intEntered}, nextOnSkip:${intSkipped},`
 		);
-		a_strCode.push(`\taddText: ${textToJs(seqInput, dialog)},`);
-		a_strCode.push(`\tcanEnter: ${condToJs(seqInput, dialog)},`)
+		// No condition field at all if it's empty
+		var codeShow;
+		var codeCond;
+		if(codeShow = textToJs(seqInput, dialog)) {
+			a_strCode.push(`\tshow: ${codeShow},`);
+		}
+		if(codeCond = condToJs(seqInput, dialog)) {
+			a_strCode.push(`\tcanEnter: ${codeCond},`)
+		}
 		a_strCode.push('},');
 	}
 
