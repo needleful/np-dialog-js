@@ -879,9 +879,41 @@ function toJS(seqInput, strName) {
 
 	for(var intIdx in seqInput.dc_int_dialog) {
 		var dialog = seqInput.dc_int_dialog[intIdx];
+		// Replace child, parent, and next with simpler constructions for runtime use
+		// nextOnEnter is the item after this when printed
+		// onSkip is the item to evaluate if this one was not entered
+		var intEntered = -1;
+		var intSkipped = -1;
+		if(dialog.intChild >= 0) {
+			intEntered = dialog.intChild;
+		}
+		
+		if(dialog.intNext >= 0) {
+			if(intEntered < 0) intEntered = dialog.intNext;
+			intSkipped = dialog.intNext;
+		}
+		else {
+			var intParent = dialog.intParent;
+			while(intParent >= 0) {
+				var diaParent = seqInput.dc_int_dialog[intParent];
+				if(!diaParent) {
+					break;
+				}
+				if(diaParent.intNext >= 1) {
+					if(intEntered < 0) 
+						intEntered = diaParent.intNext;
+					intSkipped = diaParent.intNext;
+					break
+				}
+				else {
+					intParent = diaParent.intParent;
+				}
+			}
+		}
+
 		a_strCode.push(`${intIdx}: {`);
 		a_strCode.push(
-			`\tintNext: ${dialog.intNext}, intChild:${dialog.intChild}, intParent:${dialog.intParent},`
+			`\tnextOnEnter: ${intEntered}, nextOnSkip:${intSkipped},`
 		);
 		a_strCode.push(`\taddText: ${textToJs(seqInput, dialog)},`);
 		a_strCode.push(`\tcanEnter: ${condToJs(seqInput, dialog)},`)
