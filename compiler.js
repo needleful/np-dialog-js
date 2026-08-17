@@ -643,7 +643,6 @@ function flatten(psParse) {
 			if(intPrev >= 0) {
 				dc_int_dialog[intPrev].intNext = psChild.intLine;
 				diaNode.intPrev = intPrev;
-				console.log(dc_int_dialog[intPrev].a_varText, ' -> ', diaNode.a_varText);
 			}
 			intPrev = psChild.intLine;
 
@@ -676,7 +675,6 @@ function compile(strText) {
 		var tk = a_tkTokens[t];
 		readableTokens.push(readableTk(strText, tk));
 	}
-	console.log(readableTokens);
 	var psParse = parse(strText, a_tkTokens);
 	for(var i = 0; i < psParse.a_errors.length; i++) {
 		var err = psParse.a_errors[i];
@@ -914,8 +912,9 @@ function condToJs(seqInput, dialog) {
 }
 
 // Returns javascript source code.
-function toJS(seqInput, strName) {
-	var a_strCode = [strName, ' = {',
+function toJS(seqInput) {
+	var a_strCode = ['{',
+		`intStart: ${seqInput.intStart},`,
 		'dc_str_labels: {'
 	];
 	for(var label in seqInput.dc_str_labels) {
