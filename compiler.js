@@ -922,7 +922,7 @@ function toJS(seqInput, strName) {
 		var intVal = seqInput.dc_str_labels[label];
 		a_strCode.push(`\t${quote(label)}: ${intVal},`);
 	}
-	a_strCode.push('},')
+	a_strCode.push('},');
 	function diaGet(intId) {
 		return seqInput.dc_int_dialog[intId];
 	}
