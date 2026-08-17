@@ -17,7 +17,7 @@ function appendText(elemParent, strMessage) {
 
 function appendTextOrElement(elemParent, varMsg) {
 	if(varMsg && 'baseURI' in varMsg) {
-		addChild(elemParent, varMsg);
+		elemParent.appendChild(varMsg);
 	}
 	else {
 		appendText(elemParent, String(varMsg));

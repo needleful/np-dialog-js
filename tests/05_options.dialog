@@ -1,4 +1,3 @@
-// Replies
 Hello!
 > Hello.
 	How are you?
@@ -6,6 +5,7 @@ Hello!
 		Sorry to hear that, champ!
 	> [otherwise] Not so hot.
 		That's a shame!
-	> I'm fine.
+// A comment to mess things up
+	> I'm /fine/.
 > Goodbye.
 	[exit]

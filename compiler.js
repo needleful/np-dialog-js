@@ -226,6 +226,9 @@ function tokenize(strText) {
 	var indentation = 0;
 	while(isGood()){
 		if(intState == 0) {
+			if(matchesRegex(Tok.comment, /^\s*\/\/[^\n]*/)) {
+				continue;
+			}
 			var intSkipped = skipWhiteSpace();
 			if(intSkipped > indentation) {
 				pushTk(Tok.indent, intSkipped, intC - intSkipped);
@@ -244,7 +247,6 @@ function tokenize(strText) {
 			}
 			if(matchesString(Tok.symNarration, '*')
 				|| matchesRegex(Tok.symSpeaker, /^[^\s-[\]]+\s*--/)
-				|| matchesRegex(Tok.comment, /^\/\/[^\n]*/)
 				|| matchesString(Tok.symOption, '>')
 			) {
 				intState = 2;
@@ -509,6 +511,7 @@ function parse(strText, a_tkTokens) {
 		return label;
 	}
 	var psParent = psRoot;
+	var psPrevious;
 	var intLine = 0;
 	var indent = 0;
 	var a_labels = [];
@@ -572,13 +575,14 @@ function parse(strText, a_tkTokens) {
 				break;
 			case Tok.indent:
 			case Tok.unindent:
-				item.intIndent = tkNext.intLength;
+				indent = tkNext.intLength;
 				break;
 			case Tok.exStart:
 				item.a_conditions.push(parseExpression());
 				break;
 			}
 		}
+		item.intIndent = indent;
 		// Filter out [otherwise], set a flag
 		item.a_conditions = item.a_conditions.filter(
 		(cond) => {
@@ -589,7 +593,7 @@ function parse(strText, a_tkTokens) {
 		if(item.a_varText.length || item.a_conditions.length || item.otherwise){
 			item.a_labels = a_labels;
 			a_labels = [];
-			if(item.intIndent > indent) {
+			if(psPrevious && item.intIndent > psPrevious.intIndent) {
 				var l = psParent.a_psChildren.length - 1;
 				if(l >= 0) {
 					psParent = psParent.a_psChildren[l];
@@ -601,7 +605,7 @@ function parse(strText, a_tkTokens) {
 			psParent.a_psChildren.push(item);
 			item.psParent = psParent;
 			intLine++;
-			indent = item.intIndent;
+			psPrevious = item;
 		}
 	}
 
@@ -619,8 +623,9 @@ function flatten(psParse) {
 			var psChild = psParse.a_psChildren[i];
 			psChild.strSpeaker = psChild.strSpeaker || psParse.strSpeaker;
 			var diaNode = {
-				intNext:-1,
 				intParent: psParse.intLine,
+				intNext:-1,
+				intPrev: -1,
 				intChild:-1,
 				a_varText: psChild.a_varText,
 				a_conditions: psChild.a_conditions,
@@ -637,6 +642,8 @@ function flatten(psParse) {
 
 			if(intPrev >= 0) {
 				dc_int_dialog[intPrev].intNext = psChild.intLine;
+				diaNode.intPrev = intPrev;
+				console.log(dc_int_dialog[intPrev].a_varText, ' -> ', diaNode.a_varText);
 			}
 			intPrev = psChild.intLine;
 
@@ -832,13 +839,13 @@ function textToJs(seqInput, dialog) {
 		return false;
 	}
 
-	var a_strCode = [`(ctx, display) => { //`];
+	var a_codeShow = [`(ctx, display) => { //`];
 	if(dialog.type == ItemType.option) {
-		a_strCode.push("var e = display.addReplyButton()");
+		a_codeShow.push("var e = display.addReplyButton();var btn = e");
 	}
 	else {
 		var cls = 'dia-' + ItemTypeNames[dialog.type];
-		a_strCode.push(`var e = display.addMessage(); e.classList.add('${cls}')`);
+		a_codeShow.push(`var e = display.addMessage(); e.classList.add('${cls}')`);
 	}
 
 	if(dialog.type == ItemType.message) {
@@ -849,26 +856,26 @@ function textToJs(seqInput, dialog) {
 		else {
 			codeSpeaker = '"speaker-"+ctx.defaultSpeaker';
 		}
-		a_strCode.push(`e.classList.add(${codeSpeaker})`);
+		a_codeShow.push(`e.classList.add(${codeSpeaker})`);
 	}
 	var tagStack = [];
 	var workingElemDefined = false;
 	for(let i = 0; i < dialog.a_varText.length; i++) {
 		var txt = dialog.a_varText[i];
 		if(typeof(txt) == 'string') {
-			a_strCode.push(`display.appendText(e, ${quote(txt)})`);
+			a_codeShow.push(`display.appendText(e, ${quote(txt)})`);
 			continue;
 		}
 		else if('tagStart' in txt) {
 			tagStack.push(txt.tagStart);
 			if(!workingElemDefined) {
-				a_strCode.push(`var _we = document.createElement('${txt.tagStart}')`);
+				a_codeShow.push(`var _we = document.createElement('${txt.tagStart}')`);
 				workingElemDefined = true;
 			}
 			else {
-				a_strCode.push(`_we = document.createElement('${txt.tagStart}')`);
+				a_codeShow.push(`_we = document.createElement('${txt.tagStart}')`);
 			}
-			a_strCode.push('e.appendChild(_we); e = _we');
+			a_codeShow.push('e.appendChild(_we); e = _we');
 		}
 		else if('tagEnd' in txt) {
 			var tag = txt.tagEnd;
@@ -876,31 +883,34 @@ function textToJs(seqInput, dialog) {
 			if(tag != realTag) {
 				console.error('Unexpected end tag: ', tag);
 			}
-			a_strCode.push(`e = e.parentElement`);
+			a_codeShow.push(`e = e.parentElement`);
 		}
 		else if('expInterp' in txt) {
-			a_strCode.push(`display.appendTextOrElement(e, ${expToJS(seqInput, txt.expInterp)})`)
+			a_codeShow.push(`display.appendTextOrElement(e, ${expToJS(seqInput, txt.expInterp)})`)
 		}
 		else {
-			a_strCode.push('//todo: '+ JSON.stringify(txt));
+			a_codeShow.push('//todo: '+ JSON.stringify(txt));
 		}
 	}
-	a_strCode.push('}')
-	return a_strCode.join(';\n\t\t');
+	if(dialog.type == ItemType.option) {
+		a_codeShow.push('return btn');
+	}
+	a_codeShow.push('}')
+	return a_codeShow.join(';\n\t\t');
 }
 
 function condToJs(seqInput, dialog) {
 	if(!dialog.a_conditions.length) {
 		return false;
 	}
-	var a_strCode = ['(ctx) => '];
+	var a_codeCond = ['(ctx) => '];
 	var a_strConds = []
 	for(let c = 0; c < dialog.a_conditions.length; c++) {
 		var cond = dialog.a_conditions[c];
 		a_strConds.push(`(${expToJS(seqInput, cond)})`);
 	}
-	a_strCode.push(a_strConds.join(' && '));
-	return a_strCode.join('');
+	a_codeCond.push(a_strConds.join(' && '));
+	return a_codeCond.join('');
 }
 
 // Returns javascript source code.
@@ -916,20 +926,22 @@ function toJS(seqInput, strName) {
 	function diaGet(intId) {
 		return seqInput.dc_int_dialog[intId];
 	}
-	function isOption(dialog) {
-		return dialog.type == ItemType.option;
-	}
-	function firstWithoutOtherwise(intNext){
+	// Skip [otherwise] and replies, if the current item is a reply
+	function findNext(diagFrom){
+		var intNext = diagFrom.intNext;
+		var bSkipOptions = diagFrom.type == ItemType.option;
 		while(intNext >= 0) {
 			var diaNext = diaGet(intNext);
-			if(!diaNext.otherwise) {
+			if( !diaNext.otherwise &&
+				(!bSkipOptions || diaNext.type != ItemType.option)
+			) {
 				break;
 			}
 			intNext = diaNext.intNext;
 		}
 		return intNext;
 	}
-
+	a_strCode.push('dc_int_dialog: {');
 	for(var intIdx in seqInput.dc_int_dialog) {
 		var dialog = seqInput.dc_int_dialog[intIdx];
 		// Replace child, parent, and next with simpler constructions for runtime use
@@ -947,8 +959,11 @@ function toJS(seqInput, strName) {
 		
 		if(dialog.intNext >= 0) {
 			if(intEntered < 0)
-				intEntered = firstWithoutOtherwise(dialog.intNext);
-			intSkipped = dialog.intNext;
+				intEntered = findNext(dialog);
+			if(dialog.type == ItemType.option)
+				intSkipped = findNext(dialog);
+			else
+				intSkipped = dialog.intNext;
 		}
 		else {
 			var intParent = dialog.intParent;
@@ -958,7 +973,7 @@ function toJS(seqInput, strName) {
 					break;
 				}
 
-				var intParentNext = firstWithoutOtherwise(diaParent.intNext);
+				var intParentNext = findNext(diaParent);
 				if(intParentNext >= 0) {
 					if(intEntered < 0) 
 						intEntered = intParentNext;
@@ -975,19 +990,35 @@ function toJS(seqInput, strName) {
 		a_strCode.push(
 			`\tnextOnEnter: ${intEntered}, nextOnSkip:${intSkipped},`
 		);
-		// No condition field at all if it's empty
-		var codeShow;
-		var codeCond;
+		var codeShow, codeCond;
 		if(codeShow = textToJs(seqInput, dialog)) {
 			a_strCode.push(`\tshow: ${codeShow},`);
 		}
 		if(codeCond = condToJs(seqInput, dialog)) {
-			a_strCode.push(`\tcanEnter: ${codeCond},`)
+			a_strCode.push(`\tcanEnter: ${codeCond},`);
+		}
+		// First reply in a list has the method getOptions()
+		if(dialog.type == ItemType.option
+			&& (dialog.intPrev == -1 || diaGet(dialog.intPrev).type != ItemType.option)
+		) {
+			var a_intReplies = [intIdx];
+			var intNextOption = dialog.intNext;
+			while(intNextOption != -1) {
+				var diaNextOption = diaGet(intNextOption);
+				if(diaNextOption.type == ItemType.option) {
+					a_intReplies.push(intNextOption);
+					intNextOption = diaNextOption.intNext;
+				}
+				else {
+					break;
+				}
+			}
+			a_strCode.push(`\tgetOptions: () => [${a_intReplies.join(', ')}],`)
 		}
 		a_strCode.push('},');
 	}
 
-	a_strCode.push('}');
+	a_strCode.push('}}');
 	return a_strCode.join('\n');
 }
 
