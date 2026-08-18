@@ -3,18 +3,19 @@ import std.stdio;
 import std.file;
 import np.dialog.tokenizer;
 import np.dialog.parser;
+import np.dialog.analyzer;
 
 void main(string[] args)
 {
 	testTypes();
 	if(args.length <= 1) {
 		writeln("No arguments. Running test suite");
-		testParse("tests/00_messages.dialog");
-		testParse("tests/01_conditions.dialog");
-		testParse("tests/02_errors.dialog");
-		testParse("tests/03_labels.dialog");
-		testParse("tests/04_operators.dialog");
-		testParse("tests/05_options.dialog");
+		testAnalyze("tests/00_messages.dialog");
+		testAnalyze("tests/01_conditions.dialog");
+		testAnalyze("tests/02_errors.dialog");
+		testAnalyze("tests/03_labels.dialog");
+		testAnalyze("tests/04_operators.dialog");
+		testAnalyze("tests/05_options.dialog");
 	}
 }
 
@@ -63,4 +64,17 @@ ParseResult testParse(string filePath) {
 	}
 	parsed.root.recursivePrint();
 	return parsed;
+}
+
+DialogSequence testAnalyze(string filePath) {
+	string source = readAll(filePath);
+	if (!source) {
+		return DialogSequence();
+	}
+	writefln("--- ANALYZED: %s --", filePath);
+	Tokenization tkResult = tokenize(source);
+	ParseResult parsed = parse(source, tkResult.tokens);
+	DialogSequence seq = analyze(parsed.root);
+	seq.debugPrint();
+	return seq;
 }

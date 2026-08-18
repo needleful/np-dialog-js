@@ -164,6 +164,17 @@ struct Expression {
 		}
 	}
 
+	bool isIdentifier(string name) {
+		if(head.length != 1) {
+			return false;
+		}
+		if(!head[0].has!(const(Identifier))) {
+			return false;
+		}
+		string v = head[0].get!(const(Identifier)).name;
+		return v == name;
+	} 
+
 	string toString() const {
 		import std.array;
 		string[] strings = ["["];
