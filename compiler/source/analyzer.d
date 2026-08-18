@@ -61,12 +61,6 @@ struct DialogItem {
 		if(ctEffects.length) writefln("%s\t$ %s", indent, ctEffects);
 		if(!controlFlow.isEmpty()) writefln("%s\t-> %s", indent, controlFlow);
 		if(options.length) writefln("%s\treplies: %s", indent, options);
-		writefln("%s\tid: %d, previous: %d, next: %d",
-			indent, id, previous, next
-		);
-		writefln("%s\tparent: %d, child: %d",
-			indent, parent, child
-		);
 		writefln("%s\tnextOnEnter: %d, nextOnSkip: %d",
 			indent, nextOnEnter, nextOnSkip
 		);
@@ -154,6 +148,19 @@ void applyControlFlow(ref DialogSequence seq) {
 		}
 		return next;
 	}
+	int resolveIndirectFlow(int id) {
+		while(id >= 0) {
+			DialogItem* item = seq.diaGet(id);
+			if(item.isPlainControlFlow()) {
+				id = item.nextOnEnter;
+			}
+			else {
+				break;
+			}
+		}
+		return id;
+	}
+	// Evaluate basic control flow
 	foreach(ref item; seq.dialog) {
 		bool enteredSet = false;
 		if(item.usesExit()) {
@@ -210,6 +217,18 @@ void applyControlFlow(ref DialogSequence seq) {
 					parent = diaParent.parent;
 				}
 			}
+		}
+	}
+	// Skip multi-step control flow
+	// Example: going to [otherwise] and things like that
+	foreach(ref DialogItem item; seq.dialog) {
+		bool skipAndEnter = item.nextOnEnter == item.nextOnSkip;
+		item.nextOnEnter = resolveIndirectFlow(item.nextOnEnter);
+		if(skipAndEnter) {
+			item.nextOnSkip = item.nextOnEnter;
+		}
+		else {
+			item.nextOnSkip = resolveIndirectFlow(item.nextOnSkip);
 		}
 	}
 }
