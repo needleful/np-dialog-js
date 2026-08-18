@@ -2,6 +2,7 @@ module np.dialog.tokenizer;
 
 import std.regex;
 import std.string;
+import np.dialog.common;
 
 enum Tok {
 	invalid,
@@ -41,11 +42,6 @@ struct Token {
 		import std.format;
 		return format("[%s] %s", type, source.tkText(this));
 	}
-}
-
-struct NPError {
-	string message;
-	int index;
 }
 
 struct Tokenization {

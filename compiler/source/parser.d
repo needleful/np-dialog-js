@@ -5,6 +5,8 @@ import std.format;
 import std.stdio;
 import std.string;
 import std.sumtype;
+
+import np.dialog.common;
 import np.dialog.tokenizer;
 
 
@@ -139,24 +141,22 @@ struct Expression {
 		Value val = v;
 		head ~= val;
 	}
+	bool isEmpty() const {
+		return head.length == 0 && tail.length == 0;
+	}
 	// Expressions with special control flow
 	bool isControlFlow() const {
-		if(head.length != 1) {
+		string v = getIdentifierName();
+		if(!v) {
 			return false;
 		}
-		if(!head[0].has!(const(Identifier))) {
-			return false;
-		}
-		string v = head[0].get!(const(Identifier)).name;
 		switch(v) {
 			case "otherwise": goto case;
 			case "goto": goto case;
-			case "skip": goto case;
 			case "loop": goto case;
 			case "break": goto case;
 			case "enter": goto case;
 			case "back":  goto case;
-			case "format":  goto case;
 			case "exit":
 				return true;
 			default:
@@ -164,15 +164,24 @@ struct Expression {
 		}
 	}
 
-	bool isIdentifier(string name) {
+	bool isCtEffect() const {
+		string v = getIdentifierName();
+		return v && (v == "format" || v == "skip");
+	}
+
+	string getIdentifierName() const {
 		if(head.length != 1) {
-			return false;
+			return null;
 		}
 		if(!head[0].has!(const(Identifier))) {
-			return false;
+			return null;
 		}
-		string v = head[0].get!(const(Identifier)).name;
-		return v == name;
+		return head[0].get!(const(Identifier)).name;
+	}
+
+	bool isIdentifier(string name) const {
+		string v = getIdentifierName();
+		return v && v == name;
 	} 
 
 	string toString() const {
@@ -205,7 +214,9 @@ struct ParseNode {
 	ParseNode* parent;
 	Label[] labels;
 	Expression[] conditions;
-	Expression[] controlFlow;
+	// Effects that are only relevant at compile-time
+	Expression[] ctEffects;
+	Expression controlFlow;
 	TextValue[] text;
 	string speaker;
 	Type type;
@@ -214,16 +225,20 @@ struct ParseNode {
 		text ~= tval;
 	}
 	bool isInteresting() const {
-		return (text.length || conditions.length || controlFlow.length);
+		return (text.length || conditions.length || !controlFlow.isEmpty() || ctEffects.length);
 	}
 	void recursivePrint(string indent = "") const {
 		if(conditions.length) {
 			write(indent);
 			writefln("? %s", conditions);
 		}
-		if(controlFlow.length) {
+		if(!controlFlow.isEmpty()) {
 			write(indent);
 			writefln("-> %s", controlFlow);
+		}
+		if(ctEffects.length) {
+			write(indent);
+			writefln("$ %s", controlFlow);
 		}
 
 		write(indent);
@@ -438,7 +453,13 @@ ParseResult parse(string text, Token[] tokens) {
 			case Tok.exStart:
 				Expression ex = parseExpression();
 				if(ex.isControlFlow()) {
-					parsed.controlFlow ~= ex;
+					if(!parsed.controlFlow.isEmpty()) {
+						pushTkError("Only one control-flow instruction allowed per dialog item", c-1);
+					}
+					parsed.controlFlow = ex;
+				}
+				else if(ex.isCtEffect()) {
+					parsed.ctEffects ~= ex;
 				}
 				else {
 					parsed.conditions ~= ex;

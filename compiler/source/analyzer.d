@@ -3,19 +3,23 @@ module np.dialog.analyzer;
 
 import std.format;
 import std.stdio;
+import std.sumtype;
+import np.dialog.common;
 import np.dialog.parser;
-import np.dialog.tokenizer;
 
 
-// Similar to ParseNode, but has IDs instead of references
+// Fully analyzed and flattened shape
 struct DialogItem {
 	int id = -1, previous = -1, next = -1;
 	int parent = -1, child = -1;
-	// Compiled IDs
+	// Compiled IDs, evaluating control flow logic
 	int nextOnEnter = -1, nextOnSkip = -1;
+	int[] options;
 	TextValue[] text;
 	Expression[] conditions;
-	Expression[] controlFlow;
+	// Effects that only apply at compile-time
+	Expression[] ctEffects;
+	Expression controlFlow;
 	string speaker;
 	ParseNode.Type type;
 	this(int p_id, ref ParseNode ps) {
@@ -23,22 +27,40 @@ struct DialogItem {
 		text = ps.text;
 		conditions = ps.conditions;
 		controlFlow = ps.controlFlow;
+		ctEffects = ps.ctEffects;
 		type = ps.type;
 	}
-	bool usesOtherwise() {
-		foreach(ref cf; controlFlow) {
-			if(cf.isIdentifier("otherwise")) {
-				return true;
-			}
+	bool isPlainControlFlow() const {
+		return !controlFlow.isEmpty() && !text.length && !conditions.length && !ctEffects.length;
+	}
+	bool usesOtherwise() const {
+		return controlFlow.isIdentifier("otherwise");
+	}
+	bool usesExit() const {
+		return controlFlow.isIdentifier("exit");
+	}
+	bool usesSimpleGoto() const {
+		if(controlFlow.isIdentifier("goto")) {
+			return controlFlow.tail.length == 1 
+				&& controlFlow.tail[0].has!(const(PlainText));
 		}
 		return false;
 	}
-	void printDebug(string indent = "") {
+	string getGotoTarget() const {
+		if(usesSimpleGoto()) 
+		{
+			return controlFlow.tail[0].get!(const(PlainText)).text;
+		}
+		return null;
+	}
+	void printDebug(string indent = "") const {
 		writefln("%s%d: [", indent, id);
 		writefln("%s\t%s", indent, type);
 		if(text.length) writefln("%s\t%s -- %s", indent, speaker, text);
 		if(conditions.length) writefln("%s\t? %s", indent, conditions);
-		if(controlFlow.length) writefln("%s\t-> %s", indent, controlFlow);
+		if(ctEffects.length) writefln("%s\t$ %s", indent, ctEffects);
+		if(!controlFlow.isEmpty()) writefln("%s\t-> %s", indent, controlFlow);
+		if(options.length) writefln("%s\treplies: %s", indent, options);
 		writefln("%s\tid: %d, previous: %d, next: %d",
 			indent, id, previous, next
 		);
@@ -57,7 +79,7 @@ struct DialogSequence {
 	DialogItem[] dialog;
 	NPError[] errors;
 	int start;
-	void debugPrint() {
+	void debugPrint() const {
 		writeln("labels: [");
 		foreach(label, id; labels) {
 			writefln("\t%s -> %d", label, id);
@@ -68,6 +90,9 @@ struct DialogSequence {
 			d.printDebug("\t");
 		}
 		writeln("]");
+	}
+	DialogItem* diaGet(int id) {
+		return &dialog[id];
 	}
 }
 
@@ -111,7 +136,86 @@ DialogSequence flatten(ParseNode parsed) {
 	return result;
 }
 
+// Calculate nextOnEnter and nextOnSkip
+// This applies any relationship between child and parent,
+// Plus any control flow that can be deduced at compile-time
+void applyControlFlow(ref DialogSequence seq) {
+	int findNext(const(DialogItem)* item) {
+		int next = item.next;
+		bool skipOptions = item.type == ParseNode.Type.option;
+		while(next >= 0) {
+			DialogItem* diaNext = seq.diaGet(next);
+			if(!diaNext.usesOtherwise() 
+				&& (!skipOptions || diaNext.type != ParseNode.Type.option)
+			) {
+				break;
+			}
+			next = diaNext.next;
+		}
+		return next;
+	}
+	foreach(ref item; seq.dialog) {
+		bool enteredSet = false;
+		if(item.usesExit()) {
+			enteredSet = true;
+			item.nextOnEnter = -1;
+		}
+		else if(item.usesSimpleGoto()) {
+			enteredSet = true;
+			string target = item.getGotoTarget();
+			int* s = target in seq.labels;
+			if(!s) {
+				seq.errors ~= NPError(format("No such target for [goto]: %s", target), item.id);
+			}
+			else {
+				item.nextOnEnter = *s;
+			}
+		}
+		else if(item.child >= 0) {
+			DialogItem* child = seq.diaGet(item.child);
+			if(child.usesOtherwise()) {
+				seq.errors ~= NPError("Item cannot use [otherwise] before any conditions!", item.child);
+			}
+			enteredSet = true;
+			item.nextOnEnter = item.child;
+		}
+
+		if(item.next >= 0) {
+			int foundNext = findNext(&item);
+			if(!enteredSet) {
+				item.nextOnEnter = foundNext;
+				enteredSet = true;
+			}
+			if(item.type == ParseNode.Type.option) {
+				item.nextOnSkip = foundNext;
+			}
+			else {
+				item.nextOnSkip = item.next;
+			}
+		}
+		else {
+			int parent = item.parent;
+			while(parent >= 0) {
+				DialogItem* diaParent = seq.diaGet(parent);
+				int parentNext = findNext(diaParent);
+				if(parentNext >= 0) {
+					if(!enteredSet) {
+						item.nextOnEnter = parentNext;
+						enteredSet = true;
+					}
+					item.nextOnSkip = parentNext;
+					break;
+				}
+				else {
+					parent = diaParent.parent;
+				}
+			}
+		}
+	}
+}
+
 DialogSequence analyze(ParseNode parsed) {
-	DialogSequence seq = flatten(parsed);
+	DialogSequence seq = parsed.flatten();
+	seq.applyControlFlow();
 	return seq;
 }
