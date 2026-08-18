@@ -18,24 +18,15 @@ enum OpFlags {
 string toString(OpFlags flags) {
 	int e = cast(int) flags;
 	switch(e) {
-		case 0:
-			return "none";
-		case 1:
-			return "prefix";
-		case 2:
-			return "infix";
-		case 3:
-			return "prefix & infix";
-		case 4:
-			return "postfix";
-		case 5:
-			return "prefix & postfix";
-		case 6:
-			return "infix & postfix";
-		case 7:
-			return "prefix, infix & postfix";
-		default:
-			return "<invalid>";
+		case 0:  return "none";
+		case 1:  return "prefix";
+		case 2:  return "infix";
+		case 3:  return "prefix & infix";
+		case 4:  return "postfix";
+		case 5:  return "prefix & postfix";
+		case 6:  return "infix & postfix";
+		case 7:  return "prefix, infix & postfix";
+		default: return "<invalid>";
 	}
 }
 
