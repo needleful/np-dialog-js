@@ -3,7 +3,8 @@
 [otherwise]
 	This is our next time talking.
 	[talked > #1]
-		We've talked [talked?] times now.
+		We've talked #[talked?] times now.
+		Also, [square brackets may be used in dialog].
 	[game good?]
 		Hello!
 	[otherwise][something else]

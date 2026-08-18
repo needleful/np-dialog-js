@@ -217,7 +217,7 @@ Tokenization tokenize(string text) {
 	int indentation = 0;
 	static comment = ctRegex!r"^\s*\/\/[^\n\r]*";
 	static speaker = ctRegex!r"^[^\n\r-\[\]]+\s*--";
-	static textPlain = ctRegex!r"^[^\n\r\/\\_#\[\]~]+";
+	static textPlain = ctRegex!r"^[^\n\r\/\\_#~]+";
 	static newlines = ctRegex!r"^[\n\r]+";
 
 	while(isGood()){
