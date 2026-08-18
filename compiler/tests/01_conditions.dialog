@@ -7,5 +7,5 @@
 		Also, [square brackets may be used in dialog].
 	[game good?]
 		Hello!
-	[otherwise][something else]
+	[otherwise][something else][another condition]
 		Looks like it's not working!

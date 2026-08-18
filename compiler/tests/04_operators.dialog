@@ -1,3 +1,4 @@
 [[talked = #0] || [talked = #1] | [talked > #3]]
 	The first few times you talked to me.
 	[game status += #1 | [game get_info: count]]
+	[format: text] This is formatted.

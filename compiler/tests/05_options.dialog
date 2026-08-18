@@ -3,7 +3,8 @@ Hello!
 	How are you?
 	> [day going_well] I'm doing well.
 		Sorry to hear that, champ!
-	> [otherwise] Not so hot.
+	> [otherwise][skip] Not so hot.
+		you -- I'm alright.
 		That's a shame!
 // A comment to mess things up
 	> I'm /fine/.

@@ -1,21 +1,22 @@
 import std.stdio;
 
 import std.file;
-import np.dialog.tokenizer;
-import np.dialog.parser;
 import np.dialog.analyzer;
+import np.dialog.javascript;
+import np.dialog.parser;
+import np.dialog.tokenizer;
 
 void main(string[] args)
 {
 	testTypes();
 	if(args.length <= 1) {
 		writeln("No arguments. Running test suite");
-		testAnalyze("tests/00_messages.dialog");
-		testAnalyze("tests/01_conditions.dialog");
-		testAnalyze("tests/02_errors.dialog");
-		testAnalyze("tests/03_labels.dialog");
-		testAnalyze("tests/04_operators.dialog");
-		testAnalyze("tests/05_options.dialog");
+		testJS("tests/00_messages.dialog");
+		testJS("tests/01_conditions.dialog");
+		testJS("tests/02_errors.dialog");
+		testJS("tests/03_labels.dialog");
+		testJS("tests/04_operators.dialog");
+		testJS("tests/05_options.dialog");
 	}
 }
 
@@ -77,4 +78,21 @@ DialogSequence testAnalyze(string filePath) {
 	DialogSequence seq = analyze(parsed.root);
 	seq.debugPrint();
 	return seq;
+}
+
+void testJS(string filePath) {
+	string source = readAll(filePath);
+	if (!source) {
+		return;
+	}
+	
+	import std.array : appender;
+
+	writefln("--- JAVASCRIPT: %s --", filePath);
+	Tokenization tkResult = tokenize(source);
+	ParseResult parsed = parse(source, tkResult.tokens);
+	DialogSequence seq = analyze(parsed.root);
+	auto js = appender!string();
+	seq.toJS(js);
+	writeln(js.data);
 }

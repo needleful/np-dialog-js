@@ -134,7 +134,7 @@ DialogSequence flatten(ParseNode parsed) {
 // Calculate nextOnEnter and nextOnSkip
 // This applies any relationship between child and parent,
 // Plus any control flow that can be deduced at compile-time
-void applyControlFlow(ref DialogSequence seq) {
+void seconPass(ref DialogSequence seq) {
 	int findNext(const(DialogItem)* item) {
 		int next = item.next;
 		bool skipOptions = item.type == ParseNode.Type.option;
@@ -207,6 +207,7 @@ void applyControlFlow(ref DialogSequence seq) {
 				}
 			}
 		}
+		// TODO: check text tags and interpolations
 	}
 	// Second phase
 	// Skip multi-step control flow
@@ -255,6 +256,6 @@ void applyControlFlow(ref DialogSequence seq) {
 
 DialogSequence analyze(ParseNode parsed) {
 	DialogSequence seq = parsed.flatten();
-	seq.applyControlFlow();
+	seq.seconPass();
 	return seq;
 }
