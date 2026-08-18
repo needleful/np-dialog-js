@@ -37,19 +37,23 @@ struct Token {
 	Tok type;
 	int start;
 	int length;
+	string readable(string source) {
+		import std.format;
+		return format("[%s] %s", type, source.tkText(this));
+	}
 }
 
-struct Error {
+struct NPError {
 	string message;
 	int index;
 }
 
 struct Tokenization {
 	Token[] tokens;
-	Error[] errors;
+	NPError[] errors;
 }
 
-string tkText(string text, Token token) {
+string tkText(string text, ref Token token) {
 	return text[token.start..token.start+token.length];
 }
 
@@ -76,7 +80,7 @@ Tokenization tokenize(string text) {
 	}
 	void pushErrorTk(string message, string errorText, int start = -1) {
 		pushTk(Tok.invalid, cast(int) errorText.length, start);
-		result.errors ~= Error(message, cast(int) result.tokens.length - 1);
+		result.errors ~= NPError(message, cast(int) result.tokens.length - 1);
 	}
 	bool isGood() {
 		return c < text.length;
