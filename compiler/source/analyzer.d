@@ -14,6 +14,7 @@ struct DialogItem {
 	int parent = -1, child = -1;
 	// Compiled IDs, evaluating control flow logic
 	int nextOnEnter = -1, nextOnSkip = -1;
+	// List of replies for option types
 	int[] options;
 	TextValue[] text;
 	Expression[] conditions;
@@ -148,18 +149,6 @@ void applyControlFlow(ref DialogSequence seq) {
 		}
 		return next;
 	}
-	int resolveIndirectFlow(int id) {
-		while(id >= 0) {
-			DialogItem* item = seq.diaGet(id);
-			if(item.isPlainControlFlow()) {
-				id = item.nextOnEnter;
-			}
-			else {
-				break;
-			}
-		}
-		return id;
-	}
 	// Evaluate basic control flow
 	foreach(ref item; seq.dialog) {
 		bool enteredSet = false;
@@ -219,8 +208,22 @@ void applyControlFlow(ref DialogSequence seq) {
 			}
 		}
 	}
+	// Second phase
 	// Skip multi-step control flow
 	// Example: going to [otherwise] and things like that
+	// Also collects option lists
+	int resolveIndirectFlow(int id) {
+		while(id >= 0) {
+			DialogItem* item = seq.diaGet(id);
+			if(item.isPlainControlFlow()) {
+				id = item.nextOnEnter;
+			}
+			else {
+				break;
+			}
+		}
+		return id;
+	}
 	foreach(ref DialogItem item; seq.dialog) {
 		bool skipAndEnter = item.nextOnEnter == item.nextOnSkip;
 		item.nextOnEnter = resolveIndirectFlow(item.nextOnEnter);
@@ -229,6 +232,23 @@ void applyControlFlow(ref DialogSequence seq) {
 		}
 		else {
 			item.nextOnSkip = resolveIndirectFlow(item.nextOnSkip);
+		}
+		if(item.type == ParseNode.Type.option
+			&& (item.previous == -1
+				|| seq.diaGet(item.previous).type != ParseNode.Type.option)
+		) {
+			item.options ~= item.id;
+			int nextOption = item.next;
+			while(nextOption != -1) {
+				DialogItem* option = seq.diaGet(nextOption);
+				if(option.type == ParseNode.Type.option) {
+					item.options ~= nextOption;
+					nextOption = option.next;
+				}
+				else {
+					break;
+				}
+			}
 		}
 	}
 }
