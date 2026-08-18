@@ -6,6 +6,7 @@ import np.dialog.parser;
 
 void main(string[] args)
 {
+	testTypes();
 	if(args.length <= 1) {
 		writeln("No arguments. Running test suite");
 		testParse("tests/00_messages.dialog");
@@ -15,6 +16,16 @@ void main(string[] args)
 		testParse("tests/04_operators.dialog");
 		testParse("tests/05_options.dialog");
 	}
+}
+
+void testTypes() {
+	import std.sumtype;
+	alias t = SumType!(Identifier, DynamicVar, RawValue, PlainText, Expression);
+	t v0 = Identifier("Hello");
+	t v1 = DynamicVar("bad");
+	t[] vals = [v0,v1];
+	assert(vals[0].has!Identifier);
+	assert(vals[1].has!DynamicVar);
 }
 
 string readAll(string filePath) {

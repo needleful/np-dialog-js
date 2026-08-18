@@ -79,19 +79,19 @@ struct ParseResult {
 struct Identifier {
 	string name;
 	string toString() const {
-		return name;
+		return "."~name;
 	}
 }
 struct DynamicVar {
-	string name;
+	string var;
 	string toString() const {
-		return "$"~name;
+		return "$"~var;
 	}
 }
 struct RawValue {
-	string text;
+	string value;
 	string toString() const {
-		return text;
+		return value;
 	}
 }
 struct PlainText {
@@ -153,10 +153,10 @@ struct Expression {
 		if(head.length != 1) {
 			return false;
 		}
-		if(!head[0].has!Identifier) {
+		if(!head[0].has!(const(Identifier))) {
 			return false;
 		}
-		string v = head[0].get!Identifier().name;
+		string v = head[0].get!(const(Identifier)).name;
 		switch(v) {
 			case "otherwise": goto case;
 			case "goto": goto case;
@@ -197,7 +197,7 @@ struct ParseNode {
 	enum Type {
 		message, narration, option
 	}
-	int indent, line;
+	int indent;
 	int tkStart, tkLength;
 	ParseNode[] children;
 	ParseNode* parent;
@@ -266,7 +266,7 @@ ParseResult parse(string text, Token[] tokens) {
 		return c < tokens.length;
 	}
 	ParseResult result;
-	result.root = ParseNode(0, -1, 0, cast(int)tokens.length);
+	result.root = ParseNode(0, -1, cast(int)tokens.length);
 	void pushTkError(string message, int tkIndex) {
 		result.errors ~= NPError(message, tkIndex);
 	}
@@ -381,11 +381,10 @@ ParseResult parse(string text, Token[] tokens) {
 	}
 	ParseNode* parent = &result.root;
 	ParseNode* previous;
-	int line = 0;
 	int indent = 0;
 	Label[] labels = [];
 	while(isGood()) {
-		ParseNode parsed;
+		ParseNode parsed = ParseNode(indent, c);
 		bool endLine = false;
 		bool italics = false;
 		bool bold = false;
@@ -451,6 +450,7 @@ ParseResult parse(string text, Token[] tokens) {
 				pushTkError("Unsupported token", c-1);
 			}
 		}
+		parsed.tkLength = c - parsed.tkStart;
 		parsed.indent = indent;
 		if(parsed.isInteresting()) {
 			parsed.labels = labels;
@@ -467,7 +467,6 @@ ParseResult parse(string text, Token[] tokens) {
 			parent.children ~= parsed;
 			previous = &parent.children[$-1];
 			previous.parent = parent;
-			line++;
 		}
 	}
 	return result;
