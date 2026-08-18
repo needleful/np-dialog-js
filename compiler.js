@@ -112,19 +112,6 @@ function tokenize(strText) {
 			return null;
 		}
 	}
-	function matchesOneOf(tokType, a_strMatches) {
-		if(!isGood()) {
-			return null;
-		}
-		var start = intC;
-		for(let i = 0; i < a_strMatches.length; i++) {
-			if(findString(tokType, a_strMatches[i], i)) {
-				return a_strMatches[i];
-			}
-		}
-		intC = start;
-		return null;
-	}
 	function matchesRegex(tokType, rxMatch, bSkipSpace = true) {
 		if(!isGood()) {
 			return null;
