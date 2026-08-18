@@ -1,0 +1,17 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/np-dialog-compiler
+np-dialog-compiler.so
+np-dialog-compiler.dylib
+np-dialog-compiler.dll
+libnp-dialog-compiler.a
+np-dialog-compiler.a
+np-dialog-compiler.lib
+np-dialog-compiler-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

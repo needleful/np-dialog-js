@@ -1,0 +1,5 @@
+name "np-dialog-compiler"
+description "needleful's powerful dialog language"
+authors "needleful"
+copyright "Copyright © 2026, needleful"
+license "GPL-3.0-or-later"
