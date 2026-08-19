@@ -741,10 +741,10 @@ function opToJS(strOp, strHead, a_strTail) {
 		}
 		else {
 			// Assign to a temporary variable
-			strStart += `(__temp = (${strHead})), __temp ` + trueOp
+			strStart += `(ctx.__temp = (${strHead})), ctx.__temp ` + trueOp
 			var s = [];
 			for(let t = 0; t < a_strTail.length; t++) {
-				s.push(`(__temp ${strOp} ${a_strTail[t]})`);
+				s.push(`(ctx.__temp ${strOp} ${a_strTail[t]})`);
 			}
 			strTailSub = s.join(' && ')
 		}

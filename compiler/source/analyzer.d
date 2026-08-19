@@ -30,6 +30,7 @@ struct DialogItem {
 		controlFlow = ps.controlFlow;
 		ctEffects = ps.ctEffects;
 		type = ps.type;
+		speaker = ps.speaker;
 	}
 	bool isPlainControlFlow() const {
 		return !controlFlow.isEmpty() && !text.length && !conditions.length && !ctEffects.length;

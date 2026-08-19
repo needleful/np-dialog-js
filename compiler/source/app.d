@@ -17,6 +17,11 @@ void main(string[] args)
 		testJS("tests/03_labels.dialog");
 		testJS("tests/04_operators.dialog");
 		testJS("tests/05_options.dialog");
+		return;
+	}
+	if(args.length != 3) {
+		writeln("usage: <input> <output>");
+		return;
 	}
 }
 
@@ -85,7 +90,7 @@ void testJS(string filePath) {
 	if (!source) {
 		return;
 	}
-	
+
 	import std.array : appender;
 
 	writefln("--- JAVASCRIPT: %s --", filePath);
