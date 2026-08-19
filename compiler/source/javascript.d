@@ -260,7 +260,7 @@ private:
 		addLine("\t\t],");
 	}
 	void addControlFlow(ref DialogItem item) {
-		if(item.controlFlow.isEmpty()) {
+		if(item.controlFlow.isEmpty() || item.controlFlow.isTrivialControlFlow()) {
 			return;
 		}
 		add("\t\tgetNext: (ctx) => ");

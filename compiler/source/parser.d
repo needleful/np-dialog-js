@@ -144,6 +144,21 @@ struct Expression {
 	bool isEmpty() const {
 		return head.length == 0 && tail.length == 0;
 	}
+	bool isTrivialControlFlow() const {
+		string v = getIdentifierName();
+		if(!v) {
+			return false;
+		}
+		switch(v) {
+			case "goto":
+				return tail.length <= 1;
+			case "otherwise": goto case;
+			case "exit":
+				return true;
+			default:
+				return false;
+		}
+	}
 	// Expressions with special control flow
 	bool isControlFlow() const {
 		string v = getIdentifierName();
