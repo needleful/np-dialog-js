@@ -1,7 +1,10 @@
 import std.stdio;
 
+import std.array : appender;
 import std.file;
+import std.stdio;
 import np.dialog.analyzer;
+import np.dialog.common;
 import np.dialog.javascript;
 import np.dialog.parser;
 import np.dialog.tokenizer;
@@ -19,10 +22,38 @@ void main(string[] args)
 		testJS("tests/05_options.dialog");
 		return;
 	}
-	if(args.length != 3) {
-		writeln("usage: <input> <output>");
+	if(args.length != 4) {
+		writeln("usage: <input> <output> <name>");
 		return;
 	}
+	string infile = args[1];
+	string outfile = args[2];
+	string name = args[3];
+	if(!infile.exists()) {
+		writefln("File [%s] must be a Dialog file.", infile);
+		return;
+	}
+	string source = infile.readText();
+	File outf = File(outfile, "w");
+
+	outf.writeln("// AUTOMATICALLY GENERATED");
+	outf.writefln("export const name = '%s';", name);
+	outf.writefln("export const %s =", name);
+	compileToJS(source, outf.lockingTextWriter());
+}
+
+void compileToJS(Writer)(string source, Writer wr) {
+	Tokenization tkResult = tokenize(source);
+	writeln(tkResult.errors);
+
+	ParseResult parsed = parse(source, tkResult.tokens);
+	writeln(parsed.errors);
+
+	DialogSequence seq = analyze(parsed.root);
+	writeln(parsed.errors);
+	
+	NPError[] errors = seq.toJS(wr);
+	writeln(errors);
 }
 
 void testTypes() {
@@ -91,13 +122,8 @@ void testJS(string filePath) {
 		return;
 	}
 
-	import std.array : appender;
-
 	writefln("--- JAVASCRIPT: %s --", filePath);
-	Tokenization tkResult = tokenize(source);
-	ParseResult parsed = parse(source, tkResult.tokens);
-	DialogSequence seq = analyze(parsed.root);
-	auto js = appender!string();
-	seq.toJS(js);
-	writeln(js.data);
+	auto text = appender!string;
+	compileToJS(source, text);
+	writeln(text);
 }

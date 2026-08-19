@@ -245,6 +245,7 @@ Tokenization tokenize(string text) {
 				|| matchesRegex(Tok.symSpeaker, speaker)
 				|| matchesString(Tok.symOption, ">")
 			) {
+				skipWhiteSpace();
 				state = State.flow;
 				continue;
 			}

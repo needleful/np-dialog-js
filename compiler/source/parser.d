@@ -360,7 +360,7 @@ ParseResult parse(string text, Token[] tokens) {
 				exResult.appendTail(RawValue(text.tkText(tk)));
 				break;
 			case Tok.exText:
-				exResult.appendTail(PlainText(text.tkText(tk)));
+				exResult.appendTail(PlainText(text.tkText(tk).strip()));
 				break;
 			case Tok.exEnd:
 				return validate();
