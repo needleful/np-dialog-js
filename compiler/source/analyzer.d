@@ -33,7 +33,7 @@ struct DialogItem {
 		speaker = ps.speaker;
 	}
 	bool isPlainControlFlow() const {
-		return !controlFlow.isEmpty() && !text.length && !conditions.length && !ctEffects.length;
+		return controlFlow.isTrivialControlFlow() && !text.length && !conditions.length && !ctEffects.length;
 	}
 	bool usesOtherwise() const {
 		return controlFlow.isIdentifier("otherwise");

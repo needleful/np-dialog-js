@@ -90,7 +90,7 @@ struct JSWriter(Writer) {
 			addCtEffects(item);
 			addControlFlow(item);
 			addText(item);
-			addLine("\t}");
+			addLine("\t},");
 		}
 		// Dialog
 		addLine("}");
