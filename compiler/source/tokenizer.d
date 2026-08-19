@@ -253,6 +253,7 @@ Tokenization tokenize(string text) {
 		if(state < State.text) {
 			if(matchesString(Tok.exStart, "[")) {
 				tokenizeExpression();
+				skipWhiteSpace();
 				continue;
 			}
 		}
