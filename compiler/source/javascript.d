@@ -271,6 +271,34 @@ private:
 		if(!item.text.length) {
 			return;
 		}
+
+		// Short form for the common case of plain text
+		if(item.text.length == 1 
+			&& item.text[0].has!PlainText()) 
+		{
+			add("\t\tshow: (ctx, display) => ");
+			string codeTxt = quote(item.text[0].get!PlainText().text);
+			if(item.type == ParseNode.Type.message){
+				string codeSpeaker;
+				if(item.speaker) {
+					codeSpeaker = quote(item.speaker);
+				}
+				else {
+					codeSpeaker = "ctx.defaultSpeaker";
+				}
+				add("display.AddMessage(%s, %s)", codeSpeaker, codeTxt);
+			}
+			else if(item.type == ParseNode.Type.narration) {
+				add("display.addNarration(%s)", codeTxt);
+			}
+			else if(item.type == ParseNode.Type.option) {
+				add("display.addReplyButton(%s)", codeTxt);
+			}
+			addLine(",");
+			return;
+		}
+
+		// More complex form
 		addLine("\t\tshow: (ctx, display) => {");
 		if(item.type == ParseNode.Type.option) {
 			addLine("\t\t\tvar e = display.addReplyButton();");
