@@ -125,5 +125,5 @@ void testJS(string filePath) {
 	writefln("--- JAVASCRIPT: %s --", filePath);
 	auto text = appender!string;
 	compileToJS(source, text);
-	writeln(text);
+	writeln(text.data);
 }

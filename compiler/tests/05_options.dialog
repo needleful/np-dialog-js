@@ -3,6 +3,7 @@ Hello!
 	How are you?
 	> [day going_well] I'm doing well.
 		Sorry to hear that, champ!
+	> [skip](This option is intentionally left blank.)
 	> [otherwise][skip] Not so hot.
 		you -- I'm alright.
 		That's a shame!
@@ -10,3 +11,4 @@ Hello!
 	> I'm /fine/.
 > Goodbye.
 	[exit]
+Gamer.

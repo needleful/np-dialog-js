@@ -135,7 +135,7 @@ DialogSequence flatten(ParseNode parsed) {
 // Calculate nextOnEnter and nextOnSkip
 // This applies any relationship between child and parent,
 // Plus any control flow that can be deduced at compile-time
-void seconPass(ref DialogSequence seq) {
+void secondPass(ref DialogSequence seq) {
 	int findNext(const(DialogItem)* item) {
 		int next = item.next;
 		bool skipOptions = item.type == ParseNode.Type.option;
@@ -190,7 +190,7 @@ void seconPass(ref DialogSequence seq) {
 				item.nextOnSkip = item.next;
 			}
 		}
-		else {
+		if(item.nextOnEnter == -1) {
 			int parent = item.parent;
 			while(parent >= 0) {
 				DialogItem* diaParent = seq.diaGet(parent);
@@ -257,6 +257,6 @@ void seconPass(ref DialogSequence seq) {
 
 DialogSequence analyze(ParseNode parsed) {
 	DialogSequence seq = parsed.flatten();
-	seq.seconPass();
+	seq.secondPass();
 	return seq;
 }
