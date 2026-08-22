@@ -73,6 +73,28 @@ struct JSWriter(Writer) {
 		// Labels
 		addLine("},");
 
+		addLine("fn: {");
+		foreach(functor, ref set; seq.labelSets) {
+			foreach(count; set.argumentCounts) {
+				// Standard function
+				add("\tfind_%s%d(ctx, label", functor, count);
+				if(count > 0) {
+					for(int i = 0; i < count; i++) {
+						add(", arg%d", i);
+					}
+				}
+				addLine(") => {");
+				addStandardFind(set, count);
+				addLine("\t},");
+			}
+			// Special function
+			addLine("\tfind_special_%s(ctx, label, args) => {", functor);
+			addSpecialFind(set);
+			addLine("\t},");
+		}
+		// Control flow functions
+		addLine("},");
+
 		addLine("dc_int_dialog: {");
 		foreach(ref item; seq.dialog) {
 			addLine("\t%d: {", item.id);
@@ -87,7 +109,7 @@ struct JSWriter(Writer) {
 				addLine("],");
 			}
 			addCondList(item);
-			addeffects(item);
+			addEffects(item);
 			addControlFlow(item);
 			addText(item);
 			addLine("\t},");
@@ -242,7 +264,7 @@ private:
 		}
 		addLine(",");
 	}
-	void addeffects(ref DialogItem item) {
+	void addEffects(ref DialogItem item) {
 		if(!item.effects.length) {
 			return;
 		}
@@ -266,6 +288,12 @@ private:
 		add("\t\tgetNext: (ctx) => ");
 		addExpression(item.controlFlow, item);
 		addLine(",");
+	}
+	void addStandardFind(ref LabelSet set, int argCount) {
+		return;
+	}
+	void addSpecialFind(ref LabelSet set) {
+		return;
 	}
 	void addText(ref DialogItem item) {
 		if(!item.text.length) {
