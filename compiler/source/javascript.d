@@ -67,7 +67,7 @@ struct JSWriter(Writer) {
 
 	void toJS() {
 		addLine("{\nintStart: %d,\ndc_str_labels: {", seq.start);
-		foreach(label, id; seq.labels) {
+		foreach(label, id; seq.simpleLabels) {
 			addLine("\t%s: %d,", quote(label), id);
 		}
 		// Labels
@@ -87,7 +87,7 @@ struct JSWriter(Writer) {
 				addLine("],");
 			}
 			addCondList(item);
-			addCtEffects(item);
+			addeffects(item);
 			addControlFlow(item);
 			addText(item);
 			addLine("\t},");
@@ -242,15 +242,15 @@ private:
 		}
 		addLine(",");
 	}
-	void addCtEffects(ref DialogItem item) {
-		if(!item.ctEffects.length) {
+	void addeffects(ref DialogItem item) {
+		if(!item.effects.length) {
 			return;
 		}
 		addLine("\t\trunEffects: (ctx) => [");
-		foreach(i, ref effect; item.ctEffects) {
+		foreach(i, ref effect; item.effects) {
 			add("\t\t\t");
 			addExpression(effect, item);
-			if(i + 1 < item.ctEffects.length) {
+			if(i + 1 < item.effects.length) {
 				addLine(", ");
 			}
 			else {
@@ -260,7 +260,7 @@ private:
 		addLine("\t\t],");
 	}
 	void addControlFlow(ref DialogItem item) {
-		if(item.controlFlow.isEmpty() || item.controlFlow.isTrivialControlFlow()) {
+		if(item.isTrivialControlFlow()) {
 			return;
 		}
 		add("\t\tgetNext: (ctx) => ");

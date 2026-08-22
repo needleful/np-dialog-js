@@ -144,21 +144,10 @@ struct Expression {
 	bool isEmpty() const {
 		return head.length == 0 && tail.length == 0;
 	}
-	bool isTrivialControlFlow() const {
-		string v = getIdentifierName();
-		if(!v) {
-			return false;
-		}
-		switch(v) {
-			case "goto":
-				return tail.length <= 1;
-			case "otherwise": goto case;
-			case "exit":
-				return true;
-			default:
-				return false;
-		}
+	void makeEmpty() {
+		head = []; tail = []; startOps = []; endOps = [];
 	}
+
 	// Expressions with special control flow
 	bool isControlFlow() const {
 		string v = getIdentifierName();
@@ -230,7 +219,7 @@ struct ParseNode {
 	Label[] labels;
 	Expression[] conditions;
 	// Effects that are only relevant at compile-time
-	Expression[] ctEffects;
+	Expression[] effects;
 	Expression controlFlow;
 	TextValue[] text;
 	string speaker;
@@ -240,7 +229,7 @@ struct ParseNode {
 		text ~= tval;
 	}
 	bool isInteresting() const {
-		return (text.length || conditions.length || !controlFlow.isEmpty() || ctEffects.length);
+		return (text.length || conditions.length || !controlFlow.isEmpty() || effects.length);
 	}
 	void recursivePrint(string indent = "") const {
 		foreach(ref label; labels) {
@@ -255,7 +244,7 @@ struct ParseNode {
 			write(indent);
 			writefln("-> %s", controlFlow);
 		}
-		if(ctEffects.length) {
+		if(effects.length) {
 			write(indent);
 			writefln("$ %s", controlFlow);
 		}
@@ -279,7 +268,12 @@ struct ParseNode {
 }
 
 struct Label {
-	alias Arg = SumType!(PlainText, DynamicVar, RawValue);
+	struct CatchAll{
+		string toString() const {
+			return "_";
+		}
+	}
+	alias Arg = SumType!(PlainText, DynamicVar, RawValue, CatchAll);
 	string functor;
 	string blockName;
 	Expression[] conditions;
@@ -428,6 +422,9 @@ ParseResult parse(string text, Token[] tokens) {
 					case Tok.labelArgsSplit:
 						pushTkError("Extra comma {,} label arguments: ", c-1);
 						break;
+					case Tok.labelCatchAll:
+						label.appendArg(Label.CatchAll());
+						break;
 					case Tok.labelArgsEnd:
 						argsDone = true;
 						break;
@@ -453,9 +450,6 @@ ParseResult parse(string text, Token[] tokens) {
 		}
 		if(next.type != Tok.newLine) {
 			pushTkError("Expected a newline after label declaration", c-1);
-		}
-		else {
-			pop();
 		}
 		return label;
 	}
@@ -525,7 +519,7 @@ ParseResult parse(string text, Token[] tokens) {
 					parsed.controlFlow = ex;
 				}
 				else if(ex.isCtEffect()) {
-					parsed.ctEffects ~= ex;
+					parsed.effects ~= ex;
 				}
 				else {
 					parsed.conditions ~= ex;

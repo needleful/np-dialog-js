@@ -36,7 +36,8 @@ enum Tok {
 	labelArgsStart,
 	labelArgsEnd,
 	labelArgsSplit,
-	labelOpBlockName
+	labelOpBlockName,
+	labelCatchAll,
 }
 
 struct Token {
@@ -212,6 +213,7 @@ Tokenization tokenize(string text) {
 		}
 		static const textRx = ctRegex!r"^[^,)\n\r]+";
 		static const valueRx = ctRegex!r"^#[^,)\n\r]+";
+		static const catchAllRx = ctRegex!r"^_\b";
 		if(!matchesIdentifer()){
 			pushErrorTk("TK: Expected identifier after {:} for label.", matchesRegex(Tok.invalid, any));
 			return;
@@ -223,6 +225,7 @@ Tokenization tokenize(string text) {
 					|| matchesString(Tok.exOp, "!")
 					|| matchesDynVar()
 					|| matchesRegex(Tok.exRawValue, valueRx)
+					|| matchesRegex(Tok.labelCatchAll, catchAllRx)
 					|| matchesRegex(Tok.textPlain, textRx);
 				if(!match) {
 					pushErrorTk("Unexpected token in argument list", matchesRegex(Tok.invalid, any));
@@ -278,6 +281,7 @@ Tokenization tokenize(string text) {
 		if(state < State.flow) {
 			if(matchesString(Tok.symLabel, ":")) {
 				tokenizeLabel();
+				state = State.start;
 				continue;
 			}
 			if(matchesString(Tok.symNarration, "*")

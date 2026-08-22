@@ -1,21 +1,46 @@
 :start
 Hello. Pick a number.
 > One.
-	[goto: number | #1]
+	[enter: number | #1]
 > Two.
-	[goto: number | #2]
+	[enter: number | #2]
 > Three.
-	[goto: number | #3]
-[exit]
+	[enter: number | #3]
+[goto: exit]
 
 :number(#1)
 Just one? Boo!!!
-[exit]
+[back]
 
 :number($n) [$n % #2] -> odds
 You chose #n, an odd number!
-[exit]
+[back]
 
 :number($n) -> evens
 You chose #n, an even number!
+[mention: even]
+[back]
+
+:exit [mentioned: even]
+See you!
 [exit]
+
+:exit
+Bye!
+[exit]
+
+:note(person1, person2)
+This is a note when selecting person1 and person2!
+[back]
+
+:note(person1) [mentioned: even]
+This is just about person 1.
+[back]
+
+:note(person2)
+This is for person2!
+[back]
+
+:note(_)
+This is for any notes!
+[back]

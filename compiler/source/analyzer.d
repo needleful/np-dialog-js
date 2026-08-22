@@ -19,7 +19,7 @@ struct DialogItem {
 	TextValue[] text;
 	Expression[] conditions;
 	// Effects that only apply at compile-time
-	Expression[] ctEffects;
+	Expression[] effects;
 	Expression controlFlow;
 	string speaker;
 	ParseNode.Type type;
@@ -28,12 +28,15 @@ struct DialogItem {
 		text = ps.text;
 		conditions = ps.conditions;
 		controlFlow = ps.controlFlow;
-		ctEffects = ps.ctEffects;
+		effects = ps.effects;
 		type = ps.type;
 		speaker = ps.speaker;
 	}
-	bool isPlainControlFlow() const {
-		return controlFlow.isTrivialControlFlow() && !text.length && !conditions.length && !ctEffects.length;
+	bool canSkipPast() const {
+		return isTrivialControlFlow() && !text.length && !conditions.length && !effects.length;
+	}
+	bool isTrivialControlFlow() const {
+		return controlFlow.isEmpty() || usesOtherwise() || usesExit();
 	}
 	bool usesOtherwise() const {
 		return controlFlow.isIdentifier("otherwise");
@@ -48,7 +51,7 @@ struct DialogItem {
 		}
 		return false;
 	}
-	string getGotoTarget() const {
+	string getGotoName() const {
 		if(usesSimpleGoto()) 
 		{
 			return controlFlow.tail[0].get!(const(PlainText)).text;
@@ -60,7 +63,7 @@ struct DialogItem {
 		writefln("%s\t%s", indent, type);
 		if(text.length) writefln("%s\t%s -- %s", indent, speaker, text);
 		if(conditions.length) writefln("%s\t? %s", indent, conditions);
-		if(ctEffects.length) writefln("%s\t$ %s", indent, ctEffects);
+		if(effects.length) writefln("%s\t$ %s", indent, effects);
 		if(!controlFlow.isEmpty()) writefln("%s\t-> %s", indent, controlFlow);
 		if(options.length) writefln("%s\treplies: %s", indent, options);
 		writefln("%s\tnextOnEnter: %d, nextOnSkip: %d",
@@ -70,25 +73,79 @@ struct DialogItem {
 	}
 }
 
+struct LabelEval {
+	Expression[] conditions;
+	Label.Arg[] arguments;
+	int destination;
+}
+
+struct LabelSet {
+	LabelEval[] labels;
+	uint[] argumentCounts;
+}
+
 struct DialogSequence {
-	int[string] labels;
+	// Labels with no arguments or ids
+	int[string] simpleLabels;
+	// Functors -> first arg (or _) -> labels
+	LabelSet[string] labelSets;
 	DialogItem[] dialog;
 	NPError[] errors;
 	int start;
 	void debugPrint() const {
-		writeln("labels: [");
-		foreach(label, id; labels) {
+		writeln("simpleLabels: [");
+		foreach(label, id; simpleLabels) {
 			writefln("\t%s -> %d", label, id);
 		}
 		writeln("]");
+
+		writeln("labelSets: [");
+		foreach(functor, set; labelSets) {
+			writefln("\t%s [", functor);
+			foreach(label; set.labels) {
+				writefln("\t\t%s %s -> %d", label.arguments,
+					label.conditions, label.destination);
+			}
+			writefln("\t\tcounts: %s", set.argumentCounts);
+			writeln("\t]");
+		}
+		writeln("]");
+
 		writeln("dialog: [");
 		foreach(d; dialog) {
 			d.printDebug("\t");
 		}
 		writeln("]");
 	}
+	// Append a complex label
+	void appendLabel(ref Label l, int destination) {
+		if(l.functor !in labelSets) {
+			labelSets[l.functor] = LabelSet();
+		}
+		labelSets[l.functor].labels ~= 
+			LabelEval(l.conditions, l.arguments, destination);
+	}
 	DialogItem* diaGet(int id) {
 		return &dialog[id];
+	}
+	// Only for zero-argument [goto]
+	// TODO: can skip if the arguments are known at compile time
+	int* getCompileTimeGotoTarget(string name) {
+		if(name !in labelSets) {
+			return null;
+		}
+		foreach(ref label; labelSets[name].labels) {
+			if(label.arguments.length > 0) {
+				continue;
+			}
+			if(label.conditions.length > 0) {
+				return null;
+			}
+			else {
+				return &label.destination;
+			}
+		}
+		return null;
 	}
 }
 
@@ -104,15 +161,17 @@ DialogSequence flatten(ParseNode parsed) {
 			result.dialog ~= DialogItem(cast(int)result.dialog.length, child);
 			DialogItem* item = &result.dialog[$-1];
 
-			// TODO: advanced label stuff
 			foreach(label; child.labels) {
-				if(label.functor in result.labels) {
-					result.errors ~= NPError(
-						format("Duplicate label: %s", label.functor),
-						item.id
-					);
+				result.appendLabel(label, item.id);
+				if(!label.arguments.length && !label.conditions.length) {
+					if(label.functor in result.simpleLabels) {
+						result.errors ~= NPError(
+							format("Duplicate simple label: %s", label.functor),
+							item.id
+						);
+					}
+					result.simpleLabels[label.functor] = item.id;
 				}
-				result.labels[label.functor] = item.id;
 			}
 			if(previous != -1) {
 				result.dialog[previous].next = item.id;
@@ -135,7 +194,7 @@ DialogSequence flatten(ParseNode parsed) {
 // Calculate nextOnEnter and nextOnSkip
 // This applies any relationship between child and parent,
 // Plus any control flow that can be deduced at compile-time
-void secondPass(ref DialogSequence seq) {
+void analyzeControlFlow(ref DialogSequence seq) {
 	int findNext(const(DialogItem)* item) {
 		int next = item.next;
 		bool skipOptions = item.type == ParseNode.Type.option;
@@ -159,13 +218,11 @@ void secondPass(ref DialogSequence seq) {
 		}
 		else if(item.usesSimpleGoto()) {
 			enteredSet = true;
-			string target = item.getGotoTarget();
-			int* s = target in seq.labels;
-			if(!s) {
-				seq.errors ~= NPError(format("No such target for [goto]: %s", target), item.id);
-			}
-			else {
+			string target = item.getGotoName();
+			int* s = seq.getCompileTimeGotoTarget(target);
+			if(s){
 				item.nextOnEnter = *s;
+				item.controlFlow.makeEmpty();
 			}
 		}
 		else if(item.child >= 0) {
@@ -217,8 +274,9 @@ void secondPass(ref DialogSequence seq) {
 	int resolveIndirectFlow(int id) {
 		while(id >= 0) {
 			DialogItem* item = seq.diaGet(id);
-			if(item.isPlainControlFlow()) {
+			if(item.canSkipPast()) {
 				id = item.nextOnEnter;
+				item.controlFlow.makeEmpty();
 			}
 			else {
 				break;
@@ -253,10 +311,20 @@ void secondPass(ref DialogSequence seq) {
 			}
 		}
 	}
+	// Count up label arguments
+	foreach(ref labelSet; seq.labelSets) {
+		bool[ulong] counts;
+		foreach(ref label; labelSet.labels) {
+			counts[label.arguments.length] = true;
+		}
+		foreach(key, _; counts) {
+			labelSet.argumentCounts ~= cast(uint) key;
+		}
+	}
 }
 
 DialogSequence analyze(ParseNode parsed) {
 	DialogSequence seq = parsed.flatten();
-	seq.secondPass();
+	seq.analyzeControlFlow();
 	return seq;
 }
