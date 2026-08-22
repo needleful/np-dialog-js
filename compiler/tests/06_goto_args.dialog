@@ -1,3 +1,4 @@
+:start
 Hello. Pick a number.
 > One.
 	[goto: number | #1]

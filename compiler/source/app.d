@@ -14,14 +14,33 @@ void main(string[] args)
 	testTypes();
 	if(args.length <= 1) {
 		writeln("No arguments. Running test suite");
-		runTests("tests/00_messages.dialog");
-		runTests("tests/01_conditions.dialog");
-		runTests("tests/02_errors.dialog");
-		runTests("tests/03_labels.dialog");
-		runTests("tests/04_operators.dialog");
-		runTests("tests/05_options.dialog");
-		runTests("tests/06_goto_args.dialog");
+		testAll(&testJS);
 		return;
+	}
+	if(args[1] == "--test") {
+		writefln("Testing...");
+		if(args.length < 3) {
+			writeln("Running default test: compiling to Javascript");
+			testAll(&testJS);
+			return;
+		}
+		const (void function(string))[string] actions = [
+			"tokenize": &testTokenize,
+			"parse": &testParse,
+			"analyze": &testAnalyze,
+			"js": &testJS,
+			"javascript": &testJS
+		];
+		if(args[2] in actions) {
+			testAll(actions[args[2]]);
+		}
+		else {
+			writefln("No such action: [%s]", args[2]);
+			writeln("Supported actions:");
+			foreach(string key, _; actions) {
+				writefln("\t%s", key);
+			}
+		}
 	}
 	if(args.length != 4) {
 		writeln("usage: <input> <output> <name>");
@@ -43,8 +62,14 @@ void main(string[] args)
 	compileToJS(source, outf.lockingTextWriter());
 }
 
-void runTests(string sourceFile) {
-	testJS(sourceFile);
+void testAll(void function(string) fnTest) {
+	fnTest("tests/00_messages.dialog");
+	fnTest("tests/01_conditions.dialog");
+	fnTest("tests/02_errors.dialog");
+	fnTest("tests/03_labels.dialog");
+	fnTest("tests/04_operators.dialog");
+	fnTest("tests/05_options.dialog");
+	fnTest("tests/06_goto_args.dialog");
 }
 
 void compileToJS(Writer)(string source, Writer wr) {
@@ -79,23 +104,22 @@ string readAll(string filePath) {
 	return filePath.readText();
 }
 
-Tokenization testTokenize(string filePath) {
+void testTokenize(string filePath) {
 	string source = readAll(filePath);
 	if (!source) {
-		return Tokenization();
+		return;
 	}
 	Tokenization tkResult = tokenize(source);
 	writefln("-- TOKENIZED: %s --", filePath);
 	foreach(Token tk; tkResult.tokens) {
 		writefln(" %s [%s]", tk.type, source.tkText(tk));
 	}
-	return tkResult;
 }
 
-ParseResult testParse(string filePath) {
+void testParse(string filePath) {
 	string source = readAll(filePath);
 	if (!source) {
-		return ParseResult();
+		return;
 	}
 	writefln("--- PARSED: %s --", filePath);
 	Tokenization tkResult = tokenize(source);
@@ -105,20 +129,18 @@ ParseResult testParse(string filePath) {
 		writefln(" (error) %s: {%s}", err.message, tk.readable(source));
 	}
 	parsed.root.recursivePrint();
-	return parsed;
 }
 
-DialogSequence testAnalyze(string filePath) {
+void testAnalyze(string filePath) {
 	string source = readAll(filePath);
 	if (!source) {
-		return DialogSequence();
+		return;
 	}
 	writefln("--- ANALYZED: %s --", filePath);
 	Tokenization tkResult = tokenize(source);
 	ParseResult parsed = parse(source, tkResult.tokens);
 	DialogSequence seq = analyze(parsed.root);
 	seq.debugPrint();
-	return seq;
 }
 
 void testJS(string filePath) {

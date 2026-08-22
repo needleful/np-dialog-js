@@ -40,7 +40,7 @@ struct Token {
 	int length;
 	string readable(string source) {
 		import std.format;
-		return format("[%s] %s", type, source.tkText(this));
+		return format("[%s] `%s`", type, source.tkText(this));
 	}
 }
 

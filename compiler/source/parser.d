@@ -243,6 +243,10 @@ struct ParseNode {
 		return (text.length || conditions.length || !controlFlow.isEmpty() || ctEffects.length);
 	}
 	void recursivePrint(string indent = "") const {
+		foreach(ref label; labels) {
+			write(indent);
+			writefln(":", label);
+		}
 		if(conditions.length) {
 			write(indent);
 			writefln("? %s", conditions);
@@ -282,6 +286,9 @@ struct Label {
 	string blockName;
 	Expression condition;
 	Arg[] arguments;
+	string toString() const {
+		return functor;
+	}
 }
 
 ParseResult parse(string text, Token[] tokens) {
