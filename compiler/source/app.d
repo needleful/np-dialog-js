@@ -14,12 +14,13 @@ void main(string[] args)
 	testTypes();
 	if(args.length <= 1) {
 		writeln("No arguments. Running test suite");
-		testJS("tests/00_messages.dialog");
-		testJS("tests/01_conditions.dialog");
-		testJS("tests/02_errors.dialog");
-		testJS("tests/03_labels.dialog");
-		testJS("tests/04_operators.dialog");
-		testJS("tests/05_options.dialog");
+		runTests("tests/00_messages.dialog");
+		runTests("tests/01_conditions.dialog");
+		runTests("tests/02_errors.dialog");
+		runTests("tests/03_labels.dialog");
+		runTests("tests/04_operators.dialog");
+		runTests("tests/05_options.dialog");
+		runTests("tests/06_goto_args.dialog");
 		return;
 	}
 	if(args.length != 4) {
@@ -40,6 +41,10 @@ void main(string[] args)
 	outf.writefln("export const name = '%s';", name);
 	outf.writefln("export const %s =", name);
 	compileToJS(source, outf.lockingTextWriter());
+}
+
+void runTests(string sourceFile) {
+	testJS(sourceFile);
 }
 
 void compileToJS(Writer)(string source, Writer wr) {

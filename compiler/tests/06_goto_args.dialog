@@ -1,0 +1,16 @@
+Hello. Pick a number.
+> One.
+	[goto: number | #1]
+> Two.
+	[goto: number | #2]
+> Three.
+	[goto: number | #3]
+[exit]
+
+:number(#1)
+Just one? Boo!!!
+[exit]
+
+:number($n)
+You chose #n!
+[exit]
