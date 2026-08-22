@@ -84,13 +84,13 @@ struct DynamicVar {
 struct RawValue {
 	string value;
 	string toString() const {
-		return value;
+		return "#"~value;
 	}
 }
 struct PlainText {
 	string text;
 	string toString() const {
-		return text;
+		return "`"~text~"`";
 	}
 }
 
@@ -267,10 +267,8 @@ struct ParseNode {
 		else if(type == Type.option) {
 			write("> ");
 		}
-		if(text.length) {
-			foreach(t; text) {
-				write(t);
-			}
+		foreach(t; text) {
+			write(t);
 		}
 		writeln();
 		string indent2 = indent ~ '\t';
@@ -284,10 +282,14 @@ struct Label {
 	alias Arg = SumType!(PlainText, DynamicVar, RawValue);
 	string functor;
 	string blockName;
-	Expression condition;
+	Expression[] conditions;
 	Arg[] arguments;
 	string toString() const {
-		return format(":%s(%s) :- (%s) -> %s", functor, arguments, condition, blockName);
+		return format(":%s(%s) %s -> %s", functor, arguments, conditions, blockName);
+	}
+	void appendArg(T)(T v) {
+		Arg arg = v;
+		arguments ~= arg;
 	}
 }
 
@@ -398,7 +400,6 @@ ParseResult parse(string text, Token[] tokens) {
 		}
 		return validate();
 	}
-	// TODO: full parsing of label
 	Label parseLabel() {
 		Label label;
 		Token s = peek();
@@ -409,9 +410,49 @@ ParseResult parse(string text, Token[] tokens) {
 			pop();
 			label.functor = text.tkText(s);
 		}
-		Token nl = peek();
-		if(nl.type != Tok.newLine) {
-			pushTkError("Expected a newline after label declaration", c);
+		Token next = pop();
+		if(next.type == Tok.labelArgsStart) {
+			bool argsDone = false;
+			while(isGood() && !argsDone) {
+				next = pop();
+				switch(next.type) {
+					case Tok.textPlain:
+						label.appendArg(PlainText(text.tkText(next)));
+						break;
+					case Tok.exDynamicVar:
+						label.appendArg(DynamicVar(text.tkText(next)));
+						break;
+					case Tok.exRawValue:
+						label.appendArg(RawValue(text.tkText(next)));
+						break;
+					case Tok.labelArgsSplit:
+						pushTkError("Extra comma {,} label arguments: ", c-1);
+						break;
+					case Tok.labelArgsEnd:
+						argsDone = true;
+						break;
+					default:
+						pushTkError("Unexpected token in label arguments: ", c-1);
+				}
+			}
+			next = pop();
+		}
+		while(next.type == Tok.exStart) {
+			label.conditions ~= parseExpression();
+			next = pop();
+		}
+		if(next.type == Tok.labelOpBlockName) {
+			next = pop();
+			if(next.type != Tok.exIdentifier) {
+				pushTkError("Expected an identifier after the block name arrow [->]", c-1);
+			}
+			else {
+				label.blockName = text.tkText(next);
+			}
+			next = pop();
+		}
+		if(next.type != Tok.newLine) {
+			pushTkError("Expected a newline after label declaration", c-1);
 		}
 		else {
 			pop();
@@ -468,6 +509,9 @@ ParseResult parse(string text, Token[] tokens) {
 			case Tok.markInterpolate:
 				parsed.appendText(parseExpression());
 				break;
+			case Tok.exDynamicVar:
+				parsed.appendText(DynamicVar(text.tkText(tkNext)));
+				break;
 			case Tok.indent:
 			case Tok.unindent:
 				indent = tkNext.length;
@@ -492,7 +536,7 @@ ParseResult parse(string text, Token[] tokens) {
 			case Tok.comment:
 				break;
 			default:
-				pushTkError("Unsupported token", c-1);
+				pushTkError("Unsupported text token", c-1);
 			}
 		}
 		parsed.tkLength = c - parsed.tkStart;
