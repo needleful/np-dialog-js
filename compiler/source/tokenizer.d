@@ -32,6 +32,11 @@ enum Tok {
 	exRawValue,
 	exDynamicVar,
 	exEscape,
+
+	labelArgsStart,
+	labelArgsEnd,
+	labelArgsSplit,
+	labelOpBlockName
 }
 
 struct Token {
@@ -128,13 +133,17 @@ Tokenization tokenize(string text) {
 		static rx = ctRegex!r"^\$\p{L}[\-'+\p{L}\d_]*\b";
 		return matchesRegex(Tok.exDynamicVar, rx);
 	}
+	string matchesInlineVar() {
+		static rx = ctRegex!r"^\#\p{L}[\-'+\p{L}\d_]*\b";
+		return matchesRegex(Tok.exDynamicVar, rx);
+	}
 	string matchesRawValue() {
 		// TODO: a recursive tokenization to allow for nested structures
 		static rx = ctRegex!r"^\#[^\]\|\:]+";
 		return matchesRegex(Tok.exRawValue, rx);
 	}
 	string matchesOp() {
-		static rx = ctRegex!r"^[+\-=/\\|?<>&%$!@:]+";
+		static rx = ctRegex!r"^[+\-=/\\|?<>&%!@:]+";
 		return matchesRegex(Tok.exOp, rx);
 	}
 	void tokenizeExpression() {
@@ -195,9 +204,39 @@ Tokenization tokenize(string text) {
 		}
 	}
 	void tokenizeLabel() {
+		enum LabelTokState {
+			start,
+			arguments,
+			conditions,
+			blockName,
+		}
+		static const textRx = ctRegex!r"^[^,)\n\r]+";
+		static const valueRx = ctRegex!r"^#[^,)\n\r]+";
 		if(!matchesIdentifer()){
 			pushErrorTk("TK: Expected identifier after {:} for label.", matchesRegex(Tok.invalid, any));
 			return;
+		}
+		if(matchesString(Tok.labelArgsStart, "(")) {
+			while(isGood() && !matchesString(Tok.labelArgsEnd, ")")) {
+				int start = c;
+				bool match = matchesString(Tok.labelArgsSplit, ",")
+					|| matchesString(Tok.exOp, "!")
+					|| matchesDynVar()
+					|| matchesRegex(Tok.exRawValue, valueRx)
+					|| matchesRegex(Tok.textPlain, textRx);
+				if(!match) {
+					pushErrorTk("Unexpected token in argument list", matchesRegex(Tok.invalid, any));
+					break;
+				}
+			}
+		}
+		while(matchesString(Tok.exStart, "[")) {
+			tokenizeExpression();
+		}
+		if(matchesString(Tok.labelOpBlockName, "->")) {
+			if(!matchesIdentifer()) {
+				pushErrorTk("Expected identifier after block name operator [->]", matchesRegex(Tok.invalid, any));
+			}
 		}
 	}
 	// 0: start of line (allows narration, reply, and speaker markings. Checks for indentation)
@@ -272,7 +311,7 @@ Tokenization tokenize(string text) {
 		if(matchesString(Tok.markItalics, "/")
 			|| matchesString(Tok.markBold, "_")
 			|| matchesString(Tok.markStrike, "~")
-			|| matchesString(Tok.textPlain, "#")
+			|| matchesInlineVar()
 			|| matchesRegex(Tok.textPlain, textPlain, false)
 		) {
 			state = State.text;

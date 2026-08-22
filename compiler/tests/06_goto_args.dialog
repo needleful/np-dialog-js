@@ -12,6 +12,10 @@ Hello. Pick a number.
 Just one? Boo!!!
 [exit]
 
-:number($n)
-You chose #n!
+:number($n) [$n % #2] -> odds
+You chose #n, an odd number!
+[exit]
+
+:number($n) -> evens
+You chose #n, an even number!
 [exit]

@@ -32,7 +32,12 @@ void main(string[] args)
 			"javascript": &testJS
 		];
 		if(args[2] in actions) {
-			testAll(actions[args[2]]);
+			if(args.length < 4) {
+				testAll(actions[args[2]]);
+			}
+			else {
+				testAll(actions[args[2]], args[3]);
+			}
 		}
 		else {
 			writefln("No such action: [%s]", args[2]);
@@ -41,6 +46,7 @@ void main(string[] args)
 				writefln("\t%s", key);
 			}
 		}
+		return;
 	}
 	if(args.length != 4) {
 		writeln("usage: <input> <output> <name>");
@@ -62,14 +68,19 @@ void main(string[] args)
 	compileToJS(source, outf.lockingTextWriter());
 }
 
-void testAll(void function(string) fnTest) {
-	fnTest("tests/00_messages.dialog");
-	fnTest("tests/01_conditions.dialog");
-	fnTest("tests/02_errors.dialog");
-	fnTest("tests/03_labels.dialog");
-	fnTest("tests/04_operators.dialog");
-	fnTest("tests/05_options.dialog");
-	fnTest("tests/06_goto_args.dialog");
+void testAll(void function(string) fnTest, string source = null) {
+	if(!source) {
+		fnTest("tests/00_messages.dialog");
+		fnTest("tests/01_conditions.dialog");
+		fnTest("tests/02_errors.dialog");
+		fnTest("tests/03_labels.dialog");
+		fnTest("tests/04_operators.dialog");
+		fnTest("tests/05_options.dialog");
+		fnTest("tests/06_goto_args.dialog");
+	}
+	else {
+		fnTest(source);
+	}
 }
 
 void compileToJS(Writer)(string source, Writer wr) {

@@ -245,7 +245,7 @@ struct ParseNode {
 	void recursivePrint(string indent = "") const {
 		foreach(ref label; labels) {
 			write(indent);
-			writefln(":", label);
+			writeln(label);
 		}
 		if(conditions.length) {
 			write(indent);
@@ -287,7 +287,7 @@ struct Label {
 	Expression condition;
 	Arg[] arguments;
 	string toString() const {
-		return functor;
+		return format(":%s(%s) :- (%s) -> %s", functor, arguments, condition, blockName);
 	}
 }
 
