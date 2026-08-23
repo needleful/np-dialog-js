@@ -1,0 +1,13 @@
+[goto: does_not_exist]
+[goto: wrong_arg_count | #1]
+
+
+:wrong_arg_count
+stuff!
+[goto]
+[back]
+
+:wrong_arg_count(this, that)
+more stuff!
+[enter]
+[back]

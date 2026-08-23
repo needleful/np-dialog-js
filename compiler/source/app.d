@@ -77,6 +77,7 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/04_operators.dialog");
 		fnTest("tests/05_options.dialog");
 		fnTest("tests/06_goto_args.dialog");
+		fnTest("tests/06_goto_errors.dialog");
 	}
 	else {
 		fnTest(source);

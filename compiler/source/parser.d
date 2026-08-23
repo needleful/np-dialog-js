@@ -407,26 +407,43 @@ ParseResult parse(string text, Token[] tokens) {
 		Token next = pop();
 		if(next.type == Tok.labelArgsStart) {
 			bool argsDone = false;
+			bool argAdded = false;
+			void addArg() {
+				if(argAdded) {
+					pushTkError("Expected a comma {,} between arguments", c-1);
+				}
+				argAdded = true;
+			}
 			while(isGood() && !argsDone) {
 				next = pop();
 				switch(next.type) {
 					case Tok.textPlain:
 						label.appendArg(PlainText(text.tkText(next)));
+						addArg();
 						break;
 					case Tok.exDynamicVar:
 						label.appendArg(DynamicVar(text.tkText(next)));
+						addArg();
 						break;
 					case Tok.exRawValue:
 						label.appendArg(RawValue(text.tkText(next)));
+						addArg();
 						break;
 					case Tok.labelArgsSplit:
-						pushTkError("Extra comma {,} label arguments: ", c-1);
+						if(!argAdded) {
+							pushTkError("Extra comma {,} in label arguments: ", c-1);
+						}
+						argAdded = false;
 						break;
 					case Tok.labelCatchAll:
 						label.appendArg(Label.CatchAll());
+						addArg();
 						break;
 					case Tok.labelArgsEnd:
 						argsDone = true;
+						if(!argAdded && label.arguments.length) {
+							pushTkError("Extra comma {,} at the end of the argument list", c-2);
+						}
 						break;
 					default:
 						pushTkError("Unexpected token in label arguments: ", c-1);

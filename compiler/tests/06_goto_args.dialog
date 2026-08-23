@@ -44,3 +44,7 @@ This is for person2!
 :note(_)
 This is for any notes!
 [back]
+
+:add(_, #2)
+Adding something to 2!
+[back]

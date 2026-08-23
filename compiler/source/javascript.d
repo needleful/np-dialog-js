@@ -77,10 +77,10 @@ struct JSWriter(Writer) {
 		foreach(functor, ref set; seq.labelSets) {
 			foreach(count; set.argumentCounts) {
 				// Standard function
-				add("\tfind_%s%d(ctx, label", functor, count);
+				add("\tfind_%s%d(ctx", functor, count);
 				if(count > 0) {
 					for(int i = 0; i < count; i++) {
-						add(", arg%d", i);
+						add(", _arg%d", i);
 					}
 				}
 				addLine(") => {");
@@ -88,7 +88,7 @@ struct JSWriter(Writer) {
 				addLine("\t},");
 			}
 			// Special function
-			addLine("\tfind_special_%s(ctx, label, args) => {", functor);
+			addLine("\tfind_special_%s(ctx, label, _args) => {", functor);
 			addSpecialFind(set);
 			addLine("\t},");
 		}
@@ -108,6 +108,7 @@ struct JSWriter(Writer) {
 				}
 				addLine("],");
 			}
+			localVarReplacements.clear();
 			addCondList(item);
 			addEffects(item);
 			addControlFlow(item);
@@ -122,6 +123,11 @@ struct JSWriter(Writer) {
 	}
 
 private:
+	string[string] localVarReplacements;
+
+	void add(string s) {
+		wr.formattedWrite("%s", s);
+	}
 	void add(Args...)(string spec, Args args) {
 		wr.formattedWrite(spec, args);
 	}
@@ -129,7 +135,7 @@ private:
 		add(spec, args);
 		wr.put('\n');
 	}
-	void addExpression(ref Expression ex, ref DialogItem item) {
+	void addExpression(ref Expression ex, int itemId) {
 		add("(");
 		bool complex = complexOperatorChaining(ex);
 		if(complex) {
@@ -148,7 +154,7 @@ private:
 			add("(");
 		}
 		foreach(i, ref headVal; ex.head) {
-			addExValue(headVal, i, item);
+			addExValue(headVal, i, itemId);
 			if(i + 1 < ex.head.length) {
 				add(".");
 			}
@@ -166,7 +172,7 @@ private:
 			if(complex) {
 				add(")), ctx.__temp ");
 			}
-			addArguments(ex, complex, item);
+			addArguments(ex, complex, itemId);
 		}
 
 		for(ulong i = 0; i < ex.startOps.length; i++) {
@@ -177,9 +183,9 @@ private:
 	bool complexOperatorChaining(ref Expression ex) {
 		return ex.endOps.length == 1 && ex.tail.length > 1 && opBoolChain.canFind(ex.endOps[0].text);
 	}
-	void addArguments(ref Expression ex, bool complexChain, ref DialogItem item) {
+	void addArguments(ref Expression ex, bool complexChain, int itemId) {
 		if(ex.endOps.length != 1) {
-			errors ~= NPError("Only one infix operator is allowed.", item.id);
+			errors ~= NPError("Only one infix operator is allowed.", itemId);
 			return;
 		}
 		string originalOp = ex.endOps[0].text;
@@ -204,10 +210,10 @@ private:
 			opText = opText[0..$-1];
 		}
 		if(complexChain) {
-			add(trueOp);
+			add(" %s ", trueOp);
 			foreach(i, ref tail; ex.tail) {
 				add("(ctx.__temp %s ", opText);
-				addExValue(tail, 1, item);
+				addExValue(tail, 1, itemId);
 				add(")");
 				if(i+1 < ex.tail.length) {
 					add(" && ");
@@ -222,7 +228,7 @@ private:
 				add(trueOp);
 			}
 			foreach(i, ref tail; ex.tail) {
-				addExValue(tail, 1, item);
+				addExValue(tail, 1, itemId);
 
 				if(i+1 < ex.tail.length) {
 					add("%s ", opText);
@@ -231,14 +237,20 @@ private:
 		}
 		add(end);
 	}
-	void addExValue(ref Expression.Value val, ulong index, ref DialogItem item) {
+	void addExValue(ref Expression.Value val, ulong index, int itemId) {
 		val.match!(
 			(Identifier id) {
 				if(!index) { add("ctx."); }
 				add(id.name);
 			},
 			(DynamicVar dv) {
-				add("ctx._vars["); add(quote(dv.var)); add("]");
+				// Sometimes I need scoped variables.
+				if(dv.var in localVarReplacements) {
+					add(localVarReplacements[dv.var]);
+				}
+				else {
+					add("ctx._vars["); add(quote(dv.var)); add("]");
+				}
 			},
 			(RawValue rv) {
 				add("("); add(rv.value[1..$]); add(")");
@@ -247,7 +259,7 @@ private:
 				add(quote(pt.text));
 			},
 			(Expression ex) {
-				addExpression(ex, item);
+				addExpression(ex, itemId);
 			}
 		);
 	}
@@ -257,7 +269,7 @@ private:
 		}
 		add("\t\tcanEnter: (ctx) => ");
 		foreach(i, ref condEx; item.conditions) {
-			addExpression(condEx, item);
+			addExpression(condEx, item.id);
 			if(i + 1 < item.conditions.length) {
 				add(" && ");
 			}
@@ -271,7 +283,7 @@ private:
 		addLine("\t\trunEffects: (ctx) => [");
 		foreach(i, ref effect; item.effects) {
 			add("\t\t\t");
-			addExpression(effect, item);
+			addExpression(effect, item.id);
 			if(i + 1 < item.effects.length) {
 				addLine(", ");
 			}
@@ -282,17 +294,152 @@ private:
 		addLine("\t\t],");
 	}
 	void addControlFlow(ref DialogItem item) {
+		void addCfExpression(){
+			addExpression(item.controlFlow, item.id);
+		}
+
+		void addCompiledControlFlow(string fn) {
+			// Check for control flow
+			int argCount = (cast(int) item.controlFlow.tail.length) - 1;
+			if(argCount < 0) {
+				errors ~= NPError("[goto] and [enter] need at least one argument: a string label", item.id);
+				addCfExpression();
+				return;
+			}
+			auto arg0 = item.controlFlow.tail[0];
+			if(!arg0.has!PlainText) {
+				addCfExpression();
+				return;
+			}
+
+			// TODO: move logic for checking control flow to analysis
+			string name = arg0.get!PlainText.text;
+			if(name !in seq.labelSets) {
+				errors ~= NPError(format("No such label: %s", name), item.id);
+			}
+			else if(!seq.labelSets[name].argumentCounts.canFind(argCount)) {
+				errors ~= NPError(
+					format("Label [%s] cannot be called with %d argument(s). Supported counts: %s",
+						name, argCount, seq.labelSets[name].argumentCounts), item.id);
+			}
+			add("ctx.%s_fixed(this.fn.find_%s%d(ctx", fn, name, argCount);
+			foreach(i, ref arg; item.controlFlow.tail) {
+				if(i == 0) {
+					continue;
+				}
+				add(", ");
+				addExValue(arg, 1, item.id);
+			}
+			add("))");
+		}
+
 		if(item.isTrivialControlFlow()) {
 			return;
 		}
 		add("\t\tgetNext: (ctx) => ");
-		addExpression(item.controlFlow, item);
+		string fn = item.controlFlow.getIdentifierName();
+		if(fn && (fn == "goto" || fn == "enter")) {
+			addCompiledControlFlow(fn);
+		}
+		else {
+			addCfExpression();
+		}
 		addLine(",");
 	}
 	void addStandardFind(ref LabelSet set, int argCount) {
-		return;
+		bool guaranteed = false;
+		LabelEval[] relevantLabels;
+		// Local variables used by the function
+		localVarReplacements.clear();
+		// Gather relevant labels and their variables
+		foreach(ref label; set.labels) {
+			if(label.arguments.length != argCount) {
+				continue;
+			}
+			relevantLabels ~= label;
+			foreach(ref arg; label.arguments) {
+				if(arg.has!DynamicVar) {
+					string v = arg.get!DynamicVar.var;
+					if(v !in localVarReplacements) {
+						string jsName = v[1..$].replace("'","_");
+						localVarReplacements[v] = "_dv_"~jsName;
+					}
+				}
+			}
+		}
+		foreach(name; localVarReplacements) {
+			addLine("\t\tvar %s;", name);
+		}
+		foreach(ref label; relevantLabels) {
+			if(guaranteed) {
+				errors ~= NPError("Label will never be hit.", label.destination);
+			}
+			if(!label.arguments.length && !label.conditions.length) {
+				addLine("\t\treturn %d;", label.destination);
+				guaranteed = true;
+				continue;
+			}
+
+			if(label.arguments.length) {
+				foreach(ulong i, ref arg; label.arguments) {
+					if(arg.has!DynamicVar) {
+						addLine("\t\t%s = _arg%d;", localVarReplacements[arg.get!DynamicVar.var], i);
+					}
+				}
+			}
+			add("\t\tif (");
+
+			bool[string] varsUsed;
+
+			if(label.arguments.length) {
+				add("(");
+				foreach(ulong i, ref arg; label.arguments) {
+					arg.match!(
+						(PlainText pt) {
+							add("_arg%d == %s", i, quote(pt.text));
+						},
+						(RawValue rv) {
+							add("_arg%d == (%s)", i, rv.value[1..$]);
+						},
+						(DynamicVar dv) {
+							varsUsed[dv.var] = true;
+							add("true");
+						},
+						(_) => add("true")
+					);
+					if(i + 1 < label.arguments.length) {
+						add(" && ");
+					}
+				}
+				add(")");
+			}
+			if(label.conditions.length) {
+				if(label.arguments.length) {
+					add(" && ");
+				}
+				foreach(i, ref condEx; label.conditions) {
+					addExpression(condEx, label.destination);
+					if(i + 1 < label.conditions.length) {
+						add(" && ");
+					}
+				}
+			}
+			addLine(") {");
+			foreach(dv, _; varsUsed) {
+				addLine("\t\t\tctx._vars[%s] = %s;",
+					quote(dv), localVarReplacements[dv]);
+			}
+			addLine("\t\t\treturn %d;\n\t\t}",
+				label.destination);
+		}
+		// Return a special value when we failed to find a label.
+		if(!guaranteed) {
+			addLine("\t\treturn -2;");
+		}
+		localVarReplacements.clear();
 	}
 	void addSpecialFind(ref LabelSet set) {
+		localVarReplacements = ["$_args": "_args"];
 		return;
 	}
 	void addText(ref DialogItem item) {
@@ -357,7 +504,7 @@ private:
 				},
 				(Expression ex) {
 					add("display.appendTextOrElement(e, ");
-					addExpression(ex, item);
+					addExpression(ex, item.id);
 					add(");");
 				},
 				(Tag tg) {
