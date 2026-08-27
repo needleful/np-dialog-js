@@ -84,13 +84,13 @@ struct DynamicVar {
 struct RawValue {
 	string value;
 	string toString() const {
-		return value;
+		return "#"~value;
 	}
 }
 struct PlainText {
 	string text;
 	string toString() const {
-		return text;
+		return "`"~text~"`";
 	}
 }
 
@@ -144,21 +144,10 @@ struct Expression {
 	bool isEmpty() const {
 		return head.length == 0 && tail.length == 0;
 	}
-	bool isTrivialControlFlow() const {
-		string v = getIdentifierName();
-		if(!v) {
-			return false;
-		}
-		switch(v) {
-			case "goto":
-				return tail.length <= 1;
-			case "otherwise": goto case;
-			case "exit":
-				return true;
-			default:
-				return false;
-		}
+	void makeEmpty() {
+		head = []; tail = []; startOps = []; endOps = [];
 	}
+
 	// Expressions with special control flow
 	bool isControlFlow() const {
 		string v = getIdentifierName();
@@ -230,7 +219,7 @@ struct ParseNode {
 	Label[] labels;
 	Expression[] conditions;
 	// Effects that are only relevant at compile-time
-	Expression[] ctEffects;
+	Expression[] effects;
 	Expression controlFlow;
 	TextValue[] text;
 	string speaker;
@@ -240,9 +229,13 @@ struct ParseNode {
 		text ~= tval;
 	}
 	bool isInteresting() const {
-		return (text.length || conditions.length || !controlFlow.isEmpty() || ctEffects.length);
+		return (text.length || conditions.length || !controlFlow.isEmpty() || effects.length);
 	}
 	void recursivePrint(string indent = "") const {
+		foreach(ref label; labels) {
+			write(indent);
+			writeln(label);
+		}
 		if(conditions.length) {
 			write(indent);
 			writefln("? %s", conditions);
@@ -251,7 +244,7 @@ struct ParseNode {
 			write(indent);
 			writefln("-> %s", controlFlow);
 		}
-		if(ctEffects.length) {
+		if(effects.length) {
 			write(indent);
 			writefln("$ %s", controlFlow);
 		}
@@ -263,10 +256,8 @@ struct ParseNode {
 		else if(type == Type.option) {
 			write("> ");
 		}
-		if(text.length) {
-			foreach(t; text) {
-				write(t);
-			}
+		foreach(t; text) {
+			write(t);
 		}
 		writeln();
 		string indent2 = indent ~ '\t';
@@ -277,11 +268,23 @@ struct ParseNode {
 }
 
 struct Label {
-	alias Arg = SumType!(PlainText, DynamicVar, RawValue);
+	struct CatchAll{
+		string toString() const {
+			return "_";
+		}
+	}
+	alias Arg = SumType!(PlainText, DynamicVar, RawValue, CatchAll);
 	string functor;
 	string blockName;
-	Expression condition;
+	Expression[] conditions;
 	Arg[] arguments;
+	string toString() const {
+		return format(":%s(%s) %s -> %s", functor, arguments, conditions, blockName);
+	}
+	void appendArg(T)(T v) {
+		Arg arg = v;
+		arguments ~= arg;
+	}
 }
 
 ParseResult parse(string text, Token[] tokens) {
@@ -391,7 +394,6 @@ ParseResult parse(string text, Token[] tokens) {
 		}
 		return validate();
 	}
-	// TODO: full parsing of label
 	Label parseLabel() {
 		Label label;
 		Token s = peek();
@@ -402,12 +404,69 @@ ParseResult parse(string text, Token[] tokens) {
 			pop();
 			label.functor = text.tkText(s);
 		}
-		Token nl = peek();
-		if(nl.type != Tok.newLine) {
-			pushTkError("Expected a newline after label declaration", c);
+		Token next = pop();
+		if(next.type == Tok.labelArgsStart) {
+			bool argsDone = false;
+			bool argAdded = false;
+			void addArg() {
+				if(argAdded) {
+					pushTkError("Expected a comma {,} between arguments", c-1);
+				}
+				argAdded = true;
+			}
+			while(isGood() && !argsDone) {
+				next = pop();
+				switch(next.type) {
+					case Tok.textPlain:
+						label.appendArg(PlainText(text.tkText(next)));
+						addArg();
+						break;
+					case Tok.exDynamicVar:
+						label.appendArg(DynamicVar(text.tkText(next)));
+						addArg();
+						break;
+					case Tok.exRawValue:
+						label.appendArg(RawValue(text.tkText(next)));
+						addArg();
+						break;
+					case Tok.labelArgsSplit:
+						if(!argAdded) {
+							pushTkError("Extra comma {,} in label arguments: ", c-1);
+						}
+						argAdded = false;
+						break;
+					case Tok.labelCatchAll:
+						label.appendArg(Label.CatchAll());
+						addArg();
+						break;
+					case Tok.labelArgsEnd:
+						argsDone = true;
+						if(!argAdded && label.arguments.length) {
+							pushTkError("Extra comma {,} at the end of the argument list", c-2);
+						}
+						break;
+					default:
+						pushTkError("Unexpected token in label arguments: ", c-1);
+				}
+			}
+			next = pop();
 		}
-		else {
-			pop();
+		while(next.type == Tok.exStart) {
+			label.conditions ~= parseExpression();
+			next = pop();
+		}
+		if(next.type == Tok.labelOpBlockName) {
+			next = pop();
+			if(next.type != Tok.exIdentifier) {
+				pushTkError("Expected an identifier after the block name arrow [->]", c-1);
+			}
+			else {
+				label.blockName = text.tkText(next);
+			}
+			next = pop();
+		}
+		if(next.type != Tok.newLine) {
+			pushTkError("Expected a newline after label declaration", c-1);
 		}
 		return label;
 	}
@@ -461,6 +520,9 @@ ParseResult parse(string text, Token[] tokens) {
 			case Tok.markInterpolate:
 				parsed.appendText(parseExpression());
 				break;
+			case Tok.exDynamicVar:
+				parsed.appendText(DynamicVar(text.tkText(tkNext)));
+				break;
 			case Tok.indent:
 			case Tok.unindent:
 				indent = tkNext.length;
@@ -474,7 +536,7 @@ ParseResult parse(string text, Token[] tokens) {
 					parsed.controlFlow = ex;
 				}
 				else if(ex.isCtEffect()) {
-					parsed.ctEffects ~= ex;
+					parsed.effects ~= ex;
 				}
 				else {
 					parsed.conditions ~= ex;
@@ -485,7 +547,7 @@ ParseResult parse(string text, Token[] tokens) {
 			case Tok.comment:
 				break;
 			default:
-				pushTkError("Unsupported token", c-1);
+				pushTkError("Unsupported text token", c-1);
 			}
 		}
 		parsed.tkLength = c - parsed.tkStart;
