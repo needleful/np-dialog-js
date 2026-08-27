@@ -8,52 +8,11 @@ import std.string;
 import std.sumtype;
 
 import np.dialog.common;
+import np.dialog.common_export;
 import np.dialog.analyzer;
 import np.dialog.parser;
 
 struct JSWriter(Writer) {
-	static immutable string[string] opRemap = [
-		":=": "=",
-		"=": "=="
-	];
-
-	// Operators that can be chained
-	// Note: using the MAPPED operators!
-	static immutable string[] opChained = [
-		"+",
-		"=",
-		"-",
-		"/",
-		"&&",
-		"&",
-		"|",
-		"||",
-		"%"
-	];
-
-	// Operators that are NOT just another operator plus assignment
-	// Which is assumed the default for any multi-char op ending in "="
-	// Note: using the NON-mapped operators!
-	static immutable string[] opUniqueEq = [
-		"!=",
-		":=",
-		">=",
-		"<=",
-	];
-
-	// Requires rewriting `x = y = z` as `x = y && x = z`
-	// Note: using the NON-mapped operators!
-	static immutable string[] opBoolChain = [
-		"=",
-		"!=",
-		">",
-		"<",
-	];
-
-	static string quote(string text) {
-		return "\"" ~ text.replace("\\", "\\\\").replace("\"", "\\\"") ~ "\"";
-	}
-
 	DialogSequence* seq;
 	Writer wr;
 	NPError[] errors;
@@ -68,7 +27,7 @@ struct JSWriter(Writer) {
 	void toJS() {
 		addLine("{\nintStart: %d,\ndc_str_labels: {", seq.start);
 		foreach(label, id; seq.simpleLabels) {
-			addLine("\t%s: %d,", quote(label), id);
+			addLine("\t%s: %d,", Export.quote(label), id);
 		}
 		// Labels
 		addLine("},");
@@ -181,7 +140,7 @@ private:
 		add(")");
 	}
 	bool complexOperatorChaining(ref Expression ex) {
-		return ex.endOps.length == 1 && ex.tail.length > 1 && opBoolChain.canFind(ex.endOps[0].text);
+		return ex.endOps.length == 1 && ex.tail.length > 1 && Export.opBoolChain.canFind(ex.endOps[0].text);
 	}
 	void addArguments(ref Expression ex, bool complexChain, int itemId) {
 		if(ex.endOps.length != 1) {
@@ -199,13 +158,13 @@ private:
 			add("[");
 			end = "]";
 		}
-		if(opText in opRemap) {
-			opText = opRemap[originalOp];
+		if(opText in Export.opRemap) {
+			opText = Export.opRemap[originalOp];
 		}
 		string trueOp = opText;
 		// Strip op-assignment
 		if(opText.length > 1 && opText[$-1] == '=' 
-			&& !opUniqueEq.canFind(originalOp)) 
+			&& !Export.opUniqueEq.canFind(originalOp)) 
 		{
 			opText = opText[0..$-1];
 		}
@@ -221,7 +180,7 @@ private:
 			}
 		}
 		else {
-			if(!opChained.canFind(opText)) {
+			if(!Export.opChained.canFind(opText)) {
 				opText = ",";
 			}
 			else {
@@ -249,14 +208,14 @@ private:
 					add(localVarReplacements[dv.var]);
 				}
 				else {
-					add("ctx._vars["); add(quote(dv.var)); add("]");
+					add("ctx._vars["); add(Export.quote(dv.var)); add("]");
 				}
 			},
 			(RawValue rv) {
 				add("("); add(rv.value[1..$]); add(")");
 			},
 			(PlainText pt) {
-				add(quote(pt.text));
+				add(Export.quote(pt.text));
 			},
 			(Expression ex) {
 				addExpression(ex, itemId);
@@ -396,7 +355,7 @@ private:
 				foreach(ulong i, ref arg; label.arguments) {
 					arg.match!(
 						(PlainText pt) {
-							add("_arg%d == %s", i, quote(pt.text));
+							add("_arg%d == %s", i, Export.quote(pt.text));
 						},
 						(RawValue rv) {
 							add("_arg%d == (%s)", i, rv.value[1..$]);
@@ -427,7 +386,7 @@ private:
 			addLine(") {");
 			foreach(dv, _; varsUsed) {
 				addLine("\t\t\tctx._vars[%s] = %s;",
-					quote(dv), localVarReplacements[dv]);
+					Export.quote(dv), localVarReplacements[dv]);
 			}
 			addLine("\t\t\treturn %d;\n\t\t}",
 				label.destination);
@@ -452,11 +411,11 @@ private:
 			&& item.text[0].has!PlainText()) 
 		{
 			add("\t\tshow: (ctx, display) => ");
-			string codeTxt = quote(item.text[0].get!PlainText().text);
+			string codeTxt = Export.quote(item.text[0].get!PlainText().text);
 			if(item.type == ParseNode.Type.message){
 				string codeSpeaker;
 				if(item.speaker) {
-					codeSpeaker = quote(item.speaker);
+					codeSpeaker = Export.quote(item.speaker);
 				}
 				else {
 					codeSpeaker = "ctx.defaultSpeaker";
@@ -484,7 +443,7 @@ private:
 		else {
 			string codeSpeaker;
 			if(item.speaker) {
-				codeSpeaker = quote(item.speaker);
+				codeSpeaker = Export.quote(item.speaker);
 			}
 			else {
 				codeSpeaker = "ctx.defaultSpeaker";
@@ -497,10 +456,10 @@ private:
 			add("\t\t\t");
 			tv.match!(
 				(PlainText pt) {
-					add("display.appendText(e, %s);", quote(pt.text));
+					add("display.appendText(e, %s);", Export.quote(pt.text));
 				},
 				(DynamicVar dv) {
-					add("display.appendText(e, String(ctx._vars[%s]));", quote(dv.var)); 
+					add("display.appendText(e, String(ctx._vars[%s]));", Export.quote(dv.var)); 
 				},
 				(Expression ex) {
 					add("display.appendTextOrElement(e, ");
