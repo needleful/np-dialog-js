@@ -5,6 +5,7 @@ import std.file;
 import std.stdio;
 import np.dialog.analyzer;
 import np.dialog.common;
+import np.dialog.godot;
 import np.dialog.javascript;
 import np.dialog.parser;
 import np.dialog.tokenizer;
@@ -29,6 +30,7 @@ void main(string[] args)
 			"parse": &testParse,
 			"analyze": &testAnalyze,
 			"js": &testJS,
+			"gd": &testGD,
 			"javascript": &testJS
 		];
 		if(args[2] in actions) {
@@ -48,24 +50,33 @@ void main(string[] args)
 		}
 		return;
 	}
-	if(args.length != 4) {
-		writeln("usage: <input> <output> <name>");
+	if(args.length < 4) {
+		writeln("usage: <input> <output> <type> [other parameters]");
 		return;
 	}
 	string infile = args[1];
 	string outfile = args[2];
-	string name = args[3];
+	string type = args[3];
 	if(!infile.exists()) {
 		writefln("File [%s] must be a Dialog file.", infile);
 		return;
 	}
 	string source = infile.readText();
 	File outf = File(outfile, "w");
-
-	outf.writeln("// AUTOMATICALLY GENERATED");
-	outf.writefln("export const name = '%s';", name);
-	outf.writefln("export const %s =", name);
-	compileToJS(source, outf.lockingTextWriter());
+	if(type == "js" || type == "javascript") {
+		if(args.length < 5) {
+			writeln("<name> required after type.");
+			return;
+		}
+		string name = args[4];
+		outf.writeln("// AUTOMATICALLY GENERATED");
+		outf.writefln("export const name = '%s';", name);
+		outf.writefln("export const %s =", name);
+		compileToJS(source, outf.lockingTextWriter());
+	}
+	if(type == "gd" || type == "godot") {
+		compileToGD(source, outf.lockingTextWriter());
+	}
 }
 
 void testAll(void function(string) fnTest, string source = null) {
@@ -77,7 +88,7 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/04_operators.dialog");
 		fnTest("tests/05_options.dialog");
 		fnTest("tests/06_goto_args.dialog");
-		fnTest("tests/06_goto_errors.dialog");
+		fnTest("tests/07_goto_errors.dialog");
 	}
 	else {
 		fnTest(source);
@@ -95,6 +106,20 @@ void compileToJS(Writer)(string source, Writer wr) {
 	writeln(parsed.errors);
 	
 	NPError[] errors = seq.toJS(wr);
+	writeln(errors);
+}
+
+void compileToGD(Writer)(string source, Writer wr) {
+	Tokenization tkResult = tokenize(source);
+	writeln(tkResult.errors);
+
+	ParseResult parsed = parse(source, tkResult.tokens);
+	writeln(parsed.errors);
+
+	DialogSequence seq = analyze(parsed.root);
+	writeln(parsed.errors);
+	
+	NPError[] errors = seq.toGD(wr);
 	writeln(errors);
 }
 
@@ -164,5 +189,17 @@ void testJS(string filePath) {
 	writefln("--- JAVASCRIPT: %s --", filePath);
 	auto text = appender!string;
 	compileToJS(source, text);
+	writeln(text.data);
+}
+
+void testGD(string filePath) {
+	string source = readAll(filePath);
+	if (!source) {
+		return;
+	}
+
+	writefln("--- GODOT: %s --", filePath);
+	auto text = appender!string;
+	compileToGD(source, text);
 	writeln(text.data);
 }

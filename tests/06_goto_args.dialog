@@ -33,7 +33,7 @@ Bye!
 This is a note when selecting person1 and person2!
 [back]
 
-:note(person1) [mentioned: even]
+:note(person1) [mentioned: even] -> even_person
 This is just about person 1.
 [back]
 
