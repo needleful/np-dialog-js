@@ -170,7 +170,7 @@ struct Expression {
 
 	bool isCtEffect() const {
 		string v = getIdentifierName();
-		return v && (v == "format" || v == "skip");
+		return v && (v == "format" || v == "skip" || v == "effect");
 	}
 
 	string getIdentifierName() const {
@@ -218,7 +218,7 @@ struct ParseNode {
 	ParseNode* parent;
 	Label[] labels;
 	Expression[] conditions;
-	// Effects that are only relevant at compile-time
+	// Effect methods are evaluated after or during item display
 	Expression[] effects;
 	Expression controlFlow;
 	TextValue[] text;

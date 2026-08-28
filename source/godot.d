@@ -12,12 +12,18 @@ import np.dialog.common;
 import np.dialog.common_export;
 import np.dialog.parser;
 
+static immutable string[string] gdTagNames = [
+	"b":"b",
+	"i":"i",
+	"strike":"s"
+];
+
 string makeBBText(ref DialogItem item, out bool hasInterpolation) {
 	auto text = appender!string;
 	foreach(ref tval; item.text) {
 		text.formattedWrite("%s", tval.match!(
 			(PlainText pt) => pt.text,
-			(Tag tg) => "["~ (tg.start ? "" : "/") ~ tg.text ~"]",
+			(Tag tg) => "["~ (tg.start ? "" : "/") ~ gdTagNames[tg.text] ~"]",
 			(_) {hasInterpolation = true; return "{}";}
 		));
 }
@@ -26,7 +32,7 @@ string makeBBText(ref DialogItem item, out bool hasInterpolation) {
 
 string gdTypeName(ParseNode.Type type) {
 	import std.conv;
-	return "Type."~type.to!string();
+	return "NPDialogItem.Type."~type.to!string();
 }
 
 struct GDWriter(Writer) {
@@ -73,12 +79,15 @@ struct GDWriter(Writer) {
 			addIndentation();
 			bool hasCond = item.conditions.length > 0;
 			bool hasEffect = item.effects.length > 0;
-			bool hasControlFlow = !item.controlFlow.isEmpty();
+			bool hasControlFlow = !item.isTrivialControlFlow();
 			bool hasInterpolation = false;
 			add("%d: NPDialogItem.new(%d, %d, %s",
 				item.id, item.nextOnEnter, item.nextOnSkip, item.type.gdTypeName);
-			if(item.text.length) {
+			if(item.text.length || item.speaker) {
 				add(", %s", item.makeBBText(hasInterpolation));
+			}
+			if(item.speaker) {
+				add(", %s", Export.quote(item.speaker));
 			}
 			add(")");
 			if(hasCond || hasEffect || hasControlFlow || hasInterpolation) {
@@ -398,7 +407,7 @@ struct GDWriter(Writer) {
 				addIndented("]");
 				unindent();
 			}
-			if(!item.controlFlow.isEmpty()) {
+			if(!item.isTrivialControlFlow()) {
 				if(!item.controlFlow.isIdentifier("back")) {
 					addIndented("func fnNext%d(ctx) -> int:", item.id);
 					indent();
@@ -408,6 +417,34 @@ struct GDWriter(Writer) {
 					addLine("");
 					unindent();
 				}
+			}
+			Expression.Value[] values;
+			foreach(TextValue tv; item.text) {
+				tv.match!(
+					(Expression ex) {
+						Expression.Value ev = ex;
+						values ~= ev;
+					},
+					(DynamicVar dv) {
+						Expression.Value ev = dv;
+						values ~= ev;
+					},
+					(_) {}
+				);
+			}
+			if(values.length) {
+				addIndented("func fnInterp%d(ctx) -> Array:", item.id);
+				indent();
+				addIndented("return [");
+				indent();
+				foreach(ref ev; values) {
+					addIndentation();
+					addExValue(ev, 1, item.id);
+					addLine(",");
+				}
+				unindent();
+				addIndented("]");
+				unindent();
 			}
 		}
 	}
@@ -450,10 +487,6 @@ struct GDWriter(Writer) {
 				addExValue(arg, 1, item.id);
 			}
 			add("))");
-		}
-
-		if(item.isTrivialControlFlow()) {
-			return;
 		}
 		string fn = item.controlFlow.getIdentifierName();
 		if(fn && (fn == "goto" || fn == "enter")) {
