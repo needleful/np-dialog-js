@@ -127,7 +127,7 @@ Tokenization tokenize(string text) {
 		}
 	}
 	string matchesIdentifer() {
-		static rx = ctRegex!r"^\p{L}[\p{L}\d_]*\b";
+		static rx = ctRegex!r"^[\p{L}_][\p{L}\d_]*\b";
 		return matchesRegex(Tok.exIdentifier, rx);
 	}
 	string matchesDynVar() {

@@ -108,6 +108,9 @@ struct GDWriter(Writer) {
 				string interp = hasInterpolation? format("fnInterp%d", item.id) : "null";
 				add(".with_fn(%s,%s,%s,%s)", cond, cf, eff, interp);
 			}
+			if(item.options.length) {
+				add(".with_options(%s)", item.options);
+			}
 			addLine(",");
 		}
 		unindent();
@@ -585,7 +588,8 @@ struct GDWriter(Writer) {
 			}
 		}
 		else {
-			if(!Export.opChained.canFind(opText)) {
+			// Always comma-separated if it's wrapped in end text
+			if(end.length) {
 				opText = ",";
 			}
 			else {
