@@ -1,0 +1,12 @@
+:note(item) -> name1
+:note(_) [condition] -> name2
+This will be named "name1". Should warn you about duplicate names.
+[exit]
+
+// This allows for two names on effectively the same object
+:note(item3) -> extra_name
+[skip]
+:note(item1, item2) [condition]
+:some_other_label
+This block's name is the full text of the condition.
+[exit]

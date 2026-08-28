@@ -54,6 +54,7 @@ struct GDWriter(Writer) {
 			indent();
 			addIndented("start = %d", seq.start);
 			addLabels();
+			addBlockNames();
 			addNodeDict();
 			// _init function
 			unindent();
@@ -67,6 +68,16 @@ struct GDWriter(Writer) {
 		indent();
 		foreach(label, id; seq.simpleLabels) {
 			addIndented("%s: %d,", Export.quote(label), id);
+		}
+		unindent();
+		addIndented("}");
+	}
+
+	void addBlockNames() {
+		addIndented("blocks = {");
+		indent();
+		foreach(id, block; seq.blocks) {
+			addIndented("%d: %s", id, Export.quote(block));
 		}
 		unindent();
 		addIndented("}");

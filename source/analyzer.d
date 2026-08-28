@@ -87,6 +87,8 @@ struct LabelSet {
 struct DialogSequence {
 	// Labels with no arguments or ids
 	int[string] simpleLabels;
+	// Item ids to the name of the block (only on the entry blocks)
+	string[int] blocks;
 	// Functors -> first arg (or _) -> labels
 	LabelSet[string] labelSets;
 	DialogItem[] dialog;
@@ -96,6 +98,12 @@ struct DialogSequence {
 		writeln("simpleLabels: [");
 		foreach(label, id; simpleLabels) {
 			writefln("\t%s -> %d", label, id);
+		}
+		writeln("]");
+
+		writeln("blocks: [");
+		foreach(id, block; blocks) {
+			writefln("\t%d: %s", id, block);
 		}
 		writeln("]");
 
@@ -161,6 +169,7 @@ DialogSequence flatten(ParseNode parsed) {
 			result.dialog ~= DialogItem(cast(int)result.dialog.length, child);
 			DialogItem* item = &result.dialog[$-1];
 
+			string blockName = "";
 			foreach(label; child.labels) {
 				result.appendLabel(label, item.id);
 				if(!label.arguments.length && !label.conditions.length) {
@@ -172,6 +181,22 @@ DialogSequence flatten(ParseNode parsed) {
 					}
 					result.simpleLabels[label.functor] = item.id;
 				}
+				if(label.blockName.length) {
+					if(blockName.length) {
+						result.errors ~= NPError(
+							format("Block already has a name: [%s]. Trying to add extra name: [%s]", blockName, label.blockName),
+							item.id);
+					}
+					else {
+						blockName = label.blockName;
+					}
+				}
+				else if(!blockName.length) {
+					blockName = label.generateBlockName();
+				}
+			}
+			if(blockName.length) {
+				result.blocks[item.id] = blockName;
 			}
 			if(previous != -1) {
 				result.dialog[previous].next = item.id;

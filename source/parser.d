@@ -72,25 +72,25 @@ struct ParseResult {
 struct Identifier {
 	string name;
 	string toString() const {
-		return "."~name;
+		return name;
 	}
 }
 struct DynamicVar {
 	string var;
 	string toString() const {
-		return "$"~var;
+		return var;
 	}
 }
 struct RawValue {
 	string value;
 	string toString() const {
-		return "#"~value;
+		return value;
 	}
 }
 struct PlainText {
 	string text;
 	string toString() const {
-		return "`"~text~"`";
+		return text;
 	}
 }
 
@@ -284,6 +284,11 @@ struct Label {
 	void appendArg(T)(T v) {
 		Arg arg = v;
 		arguments ~= arg;
+	}
+	string generateBlockName() const {
+		if(blockName)
+			return blockName;
+		return format("%s%s%s", functor, arguments, conditions);
 	}
 }
 

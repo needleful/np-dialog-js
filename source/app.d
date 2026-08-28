@@ -89,6 +89,7 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/05_options.dialog");
 		fnTest("tests/06_goto_args.dialog");
 		fnTest("tests/07_goto_errors.dialog");
+		fnTest("tests/00_block_names.dialog");
 	}
 	else {
 		fnTest(source);
@@ -103,7 +104,7 @@ void compileToJS(Writer)(string source, Writer wr) {
 	writeln(parsed.errors);
 
 	DialogSequence seq = analyze(parsed.root);
-	writeln(parsed.errors);
+	writeln(seq.errors);
 	
 	NPError[] errors = seq.toJS(wr);
 	writeln(errors);
@@ -117,7 +118,7 @@ void compileToGD(Writer)(string source, Writer wr) {
 	writeln(parsed.errors);
 
 	DialogSequence seq = analyze(parsed.root);
-	writeln(parsed.errors);
+	writeln(seq.errors);
 	
 	NPError[] errors = seq.toGD(wr);
 	writeln(errors);
