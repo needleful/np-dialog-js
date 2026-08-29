@@ -403,7 +403,7 @@ ParseResult parse(string text, Token[] tokens) {
 			}
 			next = pop();
 		}
-		while(next.type == Tok.exStart) {
+		while(next.type == Tok.exStart && isGood()) {
 			label.conditions ~= parseExpression();
 			next = pop();
 		}
