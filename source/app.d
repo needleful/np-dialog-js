@@ -89,7 +89,9 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/05_options.dialog");
 		fnTest("tests/06_goto_args.dialog");
 		fnTest("tests/07_goto_errors.dialog");
-		fnTest("tests/00_block_names.dialog");
+		fnTest("tests/08_block_names.dialog");
+		fnTest("tests/09_list_args.dialog");
+		fnTest("tests/10_thunk.dialog");
 	}
 	else {
 		fnTest(source);

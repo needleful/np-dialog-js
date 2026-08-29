@@ -41,8 +41,16 @@ struct Export {
 		"<",
 	];
 
+	import std.string: replace;
 	static string quote(string text) {
-		import std.string: replace;
 		return "\"" ~ text.replace("\\", "\\\\").replace("\"", "\\\"") ~ "\"";
+	}
+
+	// Identifiers can have many symbols that aren't allowed in many languages:
+	// [-], [+], ['], 
+	static string identReplace(string identifier) {
+		import std.regex;
+		static notAllowed = ctRegex!r"(\+|-|')";
+		return identifier.replaceAll(notAllowed, "_");
 	}
 }

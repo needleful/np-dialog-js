@@ -21,6 +21,10 @@ You chose #n, an even number!
 [mention: even]
 [back]
 
+:number(_) [condition] -> something
+This shouldn't be hit!
+[exit]
+
 :exit [mentioned: even]
 See you!
 [exit]

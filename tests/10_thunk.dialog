@@ -1,0 +1,5 @@
+// A thunk is a function that takes zero arguments.
+// Callbacks are often useful for precisely timing actions.
+[[-> call_func]]
+// Exit accepts a callback, for example. This is called right as the dialog window closes
+[exit: [-> player play_anim: Goodbye]]

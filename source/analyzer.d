@@ -36,13 +36,13 @@ struct DialogItem {
 		return isTrivialControlFlow() && !text.length && !conditions.length && !effects.length;
 	}
 	bool isTrivialControlFlow() const {
-		return controlFlow.isEmpty() || usesOtherwise() || usesExit();
+		return controlFlow.isEmpty() || usesOtherwise() || usesTrivialExit();
 	}
 	bool usesOtherwise() const {
 		return controlFlow.isIdentifier("otherwise");
 	}
-	bool usesExit() const {
-		return controlFlow.isIdentifier("exit");
+	bool usesTrivialExit() const {
+		return controlFlow.isIdentifier("exit") && controlFlow.tail.length == 0;
 	}
 	bool usesSimpleGoto() const {
 		if(controlFlow.isIdentifier("goto")) {
@@ -213,7 +213,7 @@ void analyzeControlFlow(ref DialogSequence seq) {
 	// Evaluate basic control flow
 	foreach(ref item; seq.dialog) {
 		bool enteredSet = false;
-		if(item.usesExit()) {
+		if(item.usesTrivialExit()) {
 			enteredSet = true;
 			item.nextOnEnter = -1;
 		}

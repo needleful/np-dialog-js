@@ -32,6 +32,7 @@ enum Tok {
 	exRawValue,
 	exDynamicVar,
 	exEscape,
+	exLambdaStart,
 
 	labelArgsStart,
 	labelArgsEnd,
@@ -55,34 +56,91 @@ struct Tokenization {
 	NPError[] errors;
 }
 
-static immutable string[] operators = [
-	"+=",
-	"-=",
-	"/=",
-	"*=",
-	"%=",
-	"&&=",
-	"||=",
-	"<=",
-	">=",
-	"@=",
+enum OpFlags {
+	none = 0,
+	prefix = 1,
+	infix = 2,
+	postfix = 4
+}
 
-	"+",
-	"-",
-	"/",
-	"*",
-	"%",
-	"&&",
-	"||",
-	":=",
-	":",
-	"=",
-	"!=",
-	"<",
-	">",
-	"@",
-	"!",
-	"?"
+string toString(OpFlags flags) {
+	int e = cast(int) flags;
+	switch(e) {
+		case 0:  return "none";
+		case 1:  return "prefix";
+		case 2:  return "infix";
+		case 3:  return "prefix & infix";
+		case 4:  return "postfix";
+		case 5:  return "prefix & postfix";
+		case 6:  return "infix & postfix";
+		case 7:  return "prefix, infix & postfix";
+		default: return "<invalid>";
+	}
+}
+
+// These aren't needed here, but it's nice to have them next to the other operator definitions
+static immutable OpFlags[string] operators = [
+	// Common math operators
+	/// + and - as prefixes are absolute value and negation, respectively
+	"+": OpFlags.infix | OpFlags.prefix,
+	"-": OpFlags.infix | OpFlags.prefix,
+	"*": OpFlags.infix,
+	"/": OpFlags.infix,
+
+	// Logic and binary (C rules)
+	"%": OpFlags.infix,
+	"&": OpFlags.infix,
+	"&&": OpFlags.infix,
+	"|": OpFlags.infix,
+	"||": OpFlags.infix,
+	"^": OpFlags.infix,
+
+	// Function call
+	":": OpFlags.infix,
+
+	// Array indexing
+	"@": OpFlags.infix,
+
+	// Assignment
+	":=": OpFlags.infix,
+
+	// Comparison
+	"=": OpFlags.infix,
+	">": OpFlags.infix,
+	"<": OpFlags.infix,
+	"<=": OpFlags.infix,
+	">=": OpFlags.infix,
+	"!=": OpFlags.infix,
+
+	// Op and Assign. Returns the updated value
+	"+=": OpFlags.infix,
+	"-=": OpFlags.infix,
+	"/=": OpFlags.infix,
+	"*=": OpFlags.infix,
+	"%=": OpFlags.infix,
+	"&=": OpFlags.infix,
+	"&&=": OpFlags.infix,
+	"|=": OpFlags.infix,
+	"||=": OpFlags.infix,
+
+	// Logical negate
+	"!": OpFlags.prefix,
+
+	// Lambda/thunk operator
+	"->": OpFlags.prefix,
+
+	// Specify that we're accessing a property, not calling a method
+	"?": OpFlags.postfix,
+];
+
+// Operators in order from largest to smallest for tokenizing
+static immutable string[] searchOps = [
+	"&&=", "||=", ":=", "<=", ">=", "!=",
+	"+=", "-=", "/=", "*=", "%=", "&=", "|=",
+	"&&", "||", "->",
+	"+", "-", "*", "/", "%", "&",
+	"|", "^", ":", "@", "!", "?",
+	"=", ">", "<",
 ];
 
 string tkText(string text, ref Token token) {
@@ -156,25 +214,27 @@ Tokenization tokenize(string text) {
 			return null;
 		}
 	}
+	enum rxPartIdent = r"[\p{L}_]['+\-\p{L}\d_.]*\b";
+
 	string matchesIdentifer() {
-		static rx = ctRegex!r"^[\p{L}_][\p{L}\d_]*\b";
+		static rx = ctRegex!(r"^"~rxPartIdent);
 		return matchesRegex(Tok.exIdentifier, rx);
 	}
 	string matchesDynVar() {
-		static rx = ctRegex!r"^\$[\p{L}_][\-'+\p{L}\d_]*\b";
+		static rx = ctRegex!(r"^\$"~rxPartIdent);
 		return matchesRegex(Tok.exDynamicVar, rx);
 	}
 	string matchesInlineVar() {
-		static rx = ctRegex!r"^\#[\p{L}_][\-'+\p{L}\d_]*\b";
+		static rx = ctRegex!(r"^\#"~rxPartIdent);
 		return matchesRegex(Tok.exDynamicVar, rx);
 	}
 	string matchesRawValue() {
 		// TODO: a recursive tokenization to allow for nested structures
-		static rx = ctRegex!r"^\#[^\]\|\:]+";
+		static rx = ctRegex!(r"^\#[^\]\|\:]+");
 		return matchesRegex(Tok.exRawValue, rx);
 	}
 	string matchesOp() {
-		foreach(s; operators) {
+		foreach(s; searchOps) {
 			if(string r = matchesString(Tok.exOp, s)) {
 				return r;
 			}

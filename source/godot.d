@@ -80,8 +80,22 @@ struct GDWriter(Writer) {
 			bool hasEffect = item.effects.length > 0;
 			bool hasControlFlow = !item.isTrivialControlFlow();
 			bool hasInterpolation = false;
-			add("%d: NPDialogItem.new(%d, %d, %s",
-				item.id, item.nextOnEnter, item.nextOnSkip, item.type.gdTypeName);
+			string createFn;
+			switch(item.type) {
+				case ParseNode.Type.message:
+					createFn = "msg(";
+					break;
+				case ParseNode.Type.narration:
+					createFn = "nr(";
+					break;
+				case ParseNode.Type.option:
+					createFn = "opt(";
+					break;
+				default:
+					createFn = format("NPDialogItem.new(%s, ", item.type.gdTypeName);
+					break;
+			}
+			add("%d: %s%d, %d", item.id, createFn, item.nextOnEnter, item.nextOnSkip);
 			if(item.text.length || item.speaker) {
 				add(", %s", item.makeBBText(hasInterpolation));
 			}
@@ -315,20 +329,20 @@ struct GDWriter(Writer) {
 			bool[string] varsUsed;
 			bool wrote;
 
+			string[] argReq;
+			ulong[] usedVars;
 			if(label.arguments.length) {
-				ulong[] usedVars;
-				string[] argReq;
 				foreach(ulong i, ref arg; label.arguments) {
 					arg.match!(
 						(PlainText pt) {
 							usedVars ~= maskItems[pt.text];
 						},
 						(RawValue rv) {
-							argReq ~= format("_arg%d == (%s)", i, rv.value[1..$]);
+							argReq ~= format("_args[%d] == (%s)", i, rv.value[1..$]);
 						},
 						(DynamicVar dv) {
 							varsUsed[dv.var] = true;
-							localVarReplacements[arg.get!DynamicVar.var] = "_arg%d".format(i);
+							localVarReplacements[arg.get!DynamicVar.var] = "_args[%d]".format(i);
 						},
 						(_) {}
 					);
@@ -356,7 +370,7 @@ struct GDWriter(Writer) {
 			}
 			if(label.conditions.length) {
 				wrote = true;
-				if(label.arguments.length) {
+				if(argReq.length + usedVars.length) {
 					add(" && ");
 				}
 				foreach(i, ref condEx; label.conditions) {
@@ -546,6 +560,14 @@ struct GDWriter(Writer) {
 			if(op.text == "+") {
 				add("abs");
 			}
+			else if(op.text == "->") {
+				indent();
+				addLine("");
+				addIndented("func():");
+				indent();
+				addIndentation();
+				add("return ");
+			}
 			else {
 				add(op.text);
 			}
@@ -573,8 +595,14 @@ struct GDWriter(Writer) {
 			addArguments(ex, complex, itemId);
 		}
 
-		for(ulong i = 0; i < ex.startOps.length; i++) {
-			add(")");
+		for(ulong i = ex.startOps.length; i > 0; i--) {
+			if(ex.startOps[cast(long)i - 1].text == "->") {
+				add(")");
+				unindent(2);
+			}
+			else {
+				add(")");
+			}
 		}
 		add(")");
 	}
@@ -653,7 +681,7 @@ struct GDWriter(Writer) {
 		val.match!(
 			(Identifier id) {
 				if(!index) { add("ctx."); }
-				add(id.name);
+				add(Export.identReplace(id.name));
 			},
 			(DynamicVar dv) {
 				addDynamicVar(dv);
@@ -676,8 +704,8 @@ private:
 	void indent() {
 		indentation += 1;
 	}
-	void unindent() {
-		indentation -= 1;
+	void unindent(int amount = 1) {
+		indentation -= amount;
 	}
 	void add(Args...)(string spec, Args args) {
 		wr.formattedWrite(spec, args);
