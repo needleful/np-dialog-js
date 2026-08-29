@@ -231,6 +231,7 @@ struct GDWriter(Writer) {
 		ulong[string] maskItems;
 		bool anyAllowedLabels = false;
 
+		// TODO: what to do about dynamic arguments in special functions?
 		foreach(ref label; set.labels) {
 			bool allowed = true;
 			foreach(ref arg; label.arguments) {
@@ -251,6 +252,7 @@ struct GDWriter(Writer) {
 		foreach(name; localVarReplacements) {
 			addIndented("var %s", name);
 		}
+		localVarReplacements["$_args"] = "_args";
 		bool tooBig = maskItems.length >= 64;
 		if(maskItems.length) {
 			if(tooBig) {

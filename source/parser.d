@@ -289,7 +289,8 @@ struct Label {
 		import std.conv;
 		if(blockName)
 			return blockName;
-		return format("%s%s%s", functor, arguments, conditions.length > 0 ? conditions.to!string() : "");
+		else
+			return format("%s%s%s", functor, arguments, conditions.length > 0 ? conditions.to!string() : "");
 	}
 }
 

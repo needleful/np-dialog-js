@@ -161,11 +161,11 @@ Tokenization tokenize(string text) {
 		return matchesRegex(Tok.exIdentifier, rx);
 	}
 	string matchesDynVar() {
-		static rx = ctRegex!r"^\$\p{L}[\-'+\p{L}\d_]*\b";
+		static rx = ctRegex!r"^\$[\p{L}_][\-'+\p{L}\d_]*\b";
 		return matchesRegex(Tok.exDynamicVar, rx);
 	}
 	string matchesInlineVar() {
-		static rx = ctRegex!r"^\#\p{L}[\-'+\p{L}\d_]*\b";
+		static rx = ctRegex!r"^\#[\p{L}_][\-'+\p{L}\d_]*\b";
 		return matchesRegex(Tok.exDynamicVar, rx);
 	}
 	string matchesRawValue() {
