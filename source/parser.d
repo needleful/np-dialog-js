@@ -286,9 +286,10 @@ struct Label {
 		arguments ~= arg;
 	}
 	string generateBlockName() const {
+		import std.conv;
 		if(blockName)
 			return blockName;
-		return format("%s%s%s", functor, arguments, conditions);
+		return format("%s%s%s", functor, arguments, conditions.length > 0 ? conditions.to!string() : "");
 	}
 }
 

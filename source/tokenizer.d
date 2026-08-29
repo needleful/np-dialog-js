@@ -55,6 +55,36 @@ struct Tokenization {
 	NPError[] errors;
 }
 
+static immutable string[] operators = [
+	"+=",
+	"-=",
+	"/=",
+	"*=",
+	"%=",
+	"&&=",
+	"||=",
+	"<=",
+	">=",
+	"@=",
+
+	"+",
+	"-",
+	"/",
+	"*",
+	"%",
+	"&&",
+	"||",
+	":=",
+	":",
+	"=",
+	"!=",
+	"<",
+	">",
+	"@",
+	"!",
+	"?"
+];
+
 string tkText(string text, ref Token token) {
 	return text[token.start..token.start+token.length];
 }
@@ -144,8 +174,12 @@ Tokenization tokenize(string text) {
 		return matchesRegex(Tok.exRawValue, rx);
 	}
 	string matchesOp() {
-		static rx = ctRegex!r"^[+\-=/\\|?<>&%!@:]+";
-		return matchesRegex(Tok.exOp, rx);
+		foreach(s; operators) {
+			if(string r = matchesString(Tok.exOp, s)) {
+				return r;
+			}
+		}
+		return null;
 	}
 	void tokenizeExpression() {
 		int start = c;

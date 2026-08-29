@@ -54,7 +54,6 @@ struct GDWriter(Writer) {
 			indent();
 			addIndented("start = %d", seq.start);
 			addLabels();
-			addBlockNames();
 			addNodeDict();
 			// _init function
 			unindent();
@@ -72,17 +71,6 @@ struct GDWriter(Writer) {
 		unindent();
 		addIndented("}");
 	}
-
-	void addBlockNames() {
-		addIndented("blocks = {");
-		indent();
-		foreach(id, block; seq.blocks) {
-			addIndented("%d: %s", id, Export.quote(block));
-		}
-		unindent();
-		addIndented("}");
-	}
-
 	void addNodeDict() {
 		addIndented("nodes = {");
 		indent();
@@ -226,11 +214,10 @@ struct GDWriter(Writer) {
 	}
 
 	bool addSpecialFind(string functor, ref LabelSet set) {
-
-		if(set.argumentCounts.length <= 1) {
+		if(!set.argumentCounts.length) {
 			return false;
 		}
-		if(set.argumentCounts[0] == 0) {
+		if(set.argumentCounts[0] == 0 && set.argumentCounts.length == 1) {
 			return false;
 		}
 		// Local variables used by the function
@@ -259,10 +246,7 @@ struct GDWriter(Writer) {
 			}
 			anyAllowedLabels |= allowed;
 		}
-		if(!anyAllowedLabels) {
-			return false;
-		}
-		addIndented("func find_special_%s(ctx, label, _args) -> int:", functor);
+		addIndented("func find_special_%s(ctx, _args) -> NPDialogFound:", functor);
 		indent();
 		foreach(name; localVarReplacements) {
 			addIndented("var %s", name);
@@ -288,20 +272,29 @@ struct GDWriter(Writer) {
 			addIndented("for _iarg in _args:");
 			indent();
 			{
-				addIndented("if _iarg not in valMap:");
-				indent();
-				addIndented("return -2");
-				unindent();
 				if(tooBig) {
 					addIndented("argSet.append(valMap[_iarg])");
 				}
 				else {
+					addIndented("if _iarg in valMap:");
+					indent();
 					addIndented("argMask |= valMap[_iarg]");
+					unindent();
 				}
 			}
 			unindent();
 			if(tooBig) {
+				addIndented("if argSet.size() == 0:");
+				indent();
+				addIndented("return NPDialogFound.invalid()");
+				unindent();
 				addIndented("argSet.sort()");
+			}
+			else {
+				addIndented("if argMask == 0:");
+				indent();
+				addIndented("return NPDialogFound.invalid()");
+				unindent();
 			}
 		}
 		bool guaranteed = false;
@@ -310,7 +303,7 @@ struct GDWriter(Writer) {
 				errors ~= NPError("Label will never be hit.", label.destination);
 			}
 			if(!label.arguments.length && !label.conditions.length) {
-				addIndented("return %d", label.destination);
+				addLabelFound(label);
 				guaranteed = true;
 				continue;
 			}
@@ -378,11 +371,38 @@ struct GDWriter(Writer) {
 				addIndented("ctx._vars[%s] = %s",
 					Export.quote(dv), localVarReplacements[dv]);
 			}
-			addIndented("return %d", label.destination);
+			addLabelFound(label);
 			unindent();
 		}
+		addIndented("return NPDialogFound.invalid()");
 		unindent();
 		return true;
+	}
+
+	void addLabelFound(ref LabelEval label) {
+		addIndentation();
+		add("return NPDialogFound.new(%d, %s, [", label.destination, Export.quote(label.blockName));
+		foreach(i, ref arg; label.arguments) {
+			bool added = arg.match!(
+				(PlainText pt) {
+					add(Export.quote(pt.text));
+					return true;
+				},
+				(RawValue rv) {
+					add("("); add(rv.value[1..$]); add(")");
+					return true;
+				},
+				(DynamicVar dv) {
+					addDynamicVar(dv);
+					return true;
+				},
+				(Label.CatchAll _) {return false;}
+			);
+			if(added && i + 1 < label.arguments.length) {
+				add(", ");
+			}
+		}
+		addLine("])");
 	}
 
 	void addNodeFunctions() {
@@ -617,6 +637,16 @@ struct GDWriter(Writer) {
 		add(end);
 	}
 
+	void addDynamicVar(DynamicVar dv) {
+		// Sometimes I need scoped variables.
+		if(dv.var in localVarReplacements) {
+			add(localVarReplacements[dv.var]);
+		}
+		else {
+			add("ctx._vars["); add(Export.quote(dv.var)); add("]");
+		}
+	}
+
 	void addExValue(ref Expression.Value val, ulong index, int itemId) {
 		val.match!(
 			(Identifier id) {
@@ -624,13 +654,7 @@ struct GDWriter(Writer) {
 				add(id.name);
 			},
 			(DynamicVar dv) {
-				// Sometimes I need scoped variables.
-				if(dv.var in localVarReplacements) {
-					add(localVarReplacements[dv.var]);
-				}
-				else {
-					add("ctx._vars["); add(Export.quote(dv.var)); add("]");
-				}
+				addDynamicVar(dv);
 			},
 			(RawValue rv) {
 				add("("); add(rv.value[1..$]); add(")");
