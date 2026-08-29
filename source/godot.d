@@ -247,7 +247,7 @@ struct GDWriter(Writer) {
 			}
 			anyAllowedLabels |= allowed;
 		}
-		addIndented("func find_special_%s(ctx, _args) -> NPDialogFound:", functor);
+		addIndented("func find_special_%s(ctx: DialogEvaluator, _args: Array) -> NPDialogFound:", functor);
 		indent();
 		foreach(name; localVarReplacements) {
 			addIndented("var %s", name);
@@ -410,7 +410,7 @@ struct GDWriter(Writer) {
 	void addNodeFunctions() {
 		foreach(ref item; seq.dialog) {
 			if(item.conditions.length) {
-				addIndented("func fnCond%d(ctx) -> bool:", item.id);
+				addIndented("func fnCond%d(ctx: DialogEvaluator) -> bool:", item.id);
 				indent();
 				addIndentation();
 				add("return ");
@@ -425,7 +425,7 @@ struct GDWriter(Writer) {
 				unindent();
 			}
 			if(item.effects.length) {
-				addIndented("func fnEffect%d(ctx) -> Array:", item.id);
+				addIndented("func fnEffect%d(ctx: DialogEvaluator) -> Array:", item.id);
 				indent();
 				addIndented("return [");
 				indent();
@@ -445,7 +445,7 @@ struct GDWriter(Writer) {
 			}
 			if(!item.isTrivialControlFlow()) {
 				if(!item.controlFlow.isIdentifier("back")) {
-					addIndented("func fnNext%d(ctx) -> int:", item.id);
+					addIndented("func fnNext%d(ctx: DialogEvaluator) -> int:", item.id);
 					indent();
 					addIndentation();
 					add("return ");
@@ -469,7 +469,7 @@ struct GDWriter(Writer) {
 				);
 			}
 			if(values.length) {
-				addIndented("func fnInterp%d(ctx) -> Array:", item.id);
+				addIndented("func fnInterp%d(ctx: DialogEvaluator) -> Array:", item.id);
 				indent();
 				addIndented("return [");
 				indent();
