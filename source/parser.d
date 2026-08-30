@@ -25,11 +25,17 @@ struct DynamicVar {
 	string toString() const {
 		return var;
 	}
+	string varName() const {
+		return var[1..$];
+	}
 }
 struct RawValue {
 	string value;
 	string toString() const {
 		return value;
+	}
+	string rawText() const {
+		return value[1..$];
 	}
 }
 struct PlainText {

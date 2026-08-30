@@ -135,7 +135,7 @@ struct GDWriter(Writer) {
 			foreach(count; set.argumentCounts) {
 				// Standard function
 				addIndentation();
-				add("func find_%s%d(ctx", functor, count);
+				add("func find_%s%d(_ctx: DialogEvaluator", functor, count);
 				if(count > 0) {
 					for(int i = 0; i < count; i++) {
 						add(", _arg%d", i);
@@ -186,10 +186,10 @@ struct GDWriter(Writer) {
 							add("_arg%d == %s", i, Export.quote(pt.text));
 						},
 						(RawValue rv) {
-							add("_arg%d == (%s)", i, rv.value[1..$]);
+							add("_arg%d == (%s)", i, rv.rawText());
 						},
 						(DynamicVar dv) {
-							varsUsed[dv.var] = true;
+							varsUsed[dv.varName()] = true;
 							localVarReplacements[arg.get!DynamicVar.var] = "_arg%d".format(i);
 							add("true");
 						},
@@ -214,7 +214,7 @@ struct GDWriter(Writer) {
 			addLine(":");
 			indent();
 			foreach(dv, _; varsUsed) {
-				addIndented("ctx._vars[%s] = %s",
+				addIndented("_ctx.declare(%s, %s)",
 					Export.quote(dv), localVarReplacements[dv]);
 			}
 			addIndented("return %d", label.destination);
@@ -261,12 +261,12 @@ struct GDWriter(Writer) {
 			}
 			anyAllowedLabels |= allowed;
 		}
-		addIndented("func find_special_%s(ctx: DialogEvaluator, _args: Array) -> NPDialogFound:", functor);
+		addIndented("func find_special_%s(_ctx: DialogEvaluator, _args: Array) -> NPDialogFound:", functor);
 		indent();
 		foreach(name; localVarReplacements) {
 			addIndented("var %s", name);
 		}
-		localVarReplacements["$_args"] = "_args";
+		localVarReplacements["_args"] = "_args";
 		bool tooBig = maskItems.length >= 64;
 		if(maskItems.length) {
 			if(tooBig) {
@@ -338,10 +338,10 @@ struct GDWriter(Writer) {
 							usedVars ~= maskItems[pt.text];
 						},
 						(RawValue rv) {
-							argReq ~= format("_args[%d] == (%s)", i, rv.value[1..$]);
+							argReq ~= format("_args[%d] == (%s)", i, rv.rawText());
 						},
 						(DynamicVar dv) {
-							varsUsed[dv.var] = true;
+							varsUsed[dv.varName()] = true;
 							localVarReplacements[arg.get!DynamicVar.var] = "_args[%d]".format(i);
 						},
 						(_) {}
@@ -384,7 +384,7 @@ struct GDWriter(Writer) {
 			addLine(":");
 			indent();
 			foreach(dv, _; varsUsed) {
-				addIndented("ctx._vars[%s] = %s",
+				addIndented("_ctx.declare(%s, %s)",
 					Export.quote(dv), localVarReplacements[dv]);
 			}
 			addLabelFound(label);
@@ -405,7 +405,7 @@ struct GDWriter(Writer) {
 					return true;
 				},
 				(RawValue rv) {
-					add("("); add(rv.value[1..$]); add(")");
+					add("("); add(rv.rawText()); add(")");
 					return true;
 				},
 				(DynamicVar dv) {
@@ -424,12 +424,12 @@ struct GDWriter(Writer) {
 	void addNodeFunctions() {
 		foreach(ref item; seq.dialog) {
 			if(item.conditions.length) {
-				addIndented("func fnCond%d(ctx: DialogEvaluator) -> bool:", item.id);
+				addIndented("func fnCond%d(_ctx: DialogEvaluator) -> bool:", item.id);
 				indent();
 				addIndentation();
 				add("return ");
 				foreach(i, ref condEx; item.conditions) {
-					add("bool");
+					add("!!");
 					addExpression(condEx, item.id);
 					if(i + 1 < item.conditions.length) {
 						add(" && ");
@@ -439,7 +439,7 @@ struct GDWriter(Writer) {
 				unindent();
 			}
 			if(item.effects.length) {
-				addIndented("func fnEffect%d(ctx: DialogEvaluator) -> Array:", item.id);
+				addIndented("func fnEffect%d(_ctx: DialogEvaluator) -> Array:", item.id);
 				indent();
 				addIndented("return [");
 				indent();
@@ -459,7 +459,7 @@ struct GDWriter(Writer) {
 			}
 			if(!item.isTrivialControlFlow()) {
 				if(!item.controlFlow.isIdentifier("back")) {
-					addIndented("func fnNext%d(ctx: DialogEvaluator) -> int:", item.id);
+					addIndented("func fnNext%d(_ctx: DialogEvaluator) -> int:", item.id);
 					indent();
 					addIndentation();
 					add("return ");
@@ -483,7 +483,7 @@ struct GDWriter(Writer) {
 				);
 			}
 			if(values.length) {
-				addIndented("func fnInterp%d(ctx: DialogEvaluator) -> Array:", item.id);
+				addIndented("func fnInterp%d(_ctx: DialogEvaluator) -> Array:", item.id);
 				indent();
 				addIndented("return [");
 				indent();
@@ -528,7 +528,12 @@ struct GDWriter(Writer) {
 					format("Label [%s] cannot be called with %d argument(s). Supported counts: %s",
 						name, argCount, seq.labelSets[name].argumentCounts), item.id);
 			}
-			add("ctx.%s_fixed(find_%s%d(ctx", fn, name, argCount);
+			if(fn == "goto") {
+				add("find_%s%d(_ctx", name, argCount);
+			}
+			else {
+				add("_ctx.%s_fixed(find_%s%d(_ctx", fn, name, argCount);
+			}
 			foreach(i, ref arg; item.controlFlow.tail) {
 				if(i == 0) {
 					continue;
@@ -536,7 +541,12 @@ struct GDWriter(Writer) {
 				add(", ");
 				addExValue(arg, 1, item.id);
 			}
-			add("))");
+			if(fn == "goto") {
+				add(")");
+			}
+			else {
+				add("))");
+			}
 		}
 		string fn = item.controlFlow.getIdentifierName();
 		if(fn && (fn == "goto" || fn == "enter")) {
@@ -553,8 +563,8 @@ struct GDWriter(Writer) {
 		if(complex) {
 			// Have to assign to a temporary value to chain operators
 			// Usually something like [[get_stat: this] > y | z]
-			// Which would translate into ((ctx.__temp = (ctx.get_stat("this"))), (ctx.__temp > y) && (ctx.__temp > z))
-			add("(ctx.__temp = (");
+			// Which would translate into ((_ctx.__temp = (_ctx.get_stat("this"))), (_ctx.__temp > y) && (_ctx.__temp > z))
+			add("(_ctx.__temp = (");
 		}
 		foreach(ref op; ex.startOps) {
 			if(op.text == "+") {
@@ -590,7 +600,7 @@ struct GDWriter(Writer) {
 		}
 		else {
 			if(complex) {
-				add(")), ctx.__temp ");
+				add(")), _ctx.__temp ");
 			}
 			addArguments(ex, complex, itemId);
 		}
@@ -640,7 +650,7 @@ struct GDWriter(Writer) {
 		if(complexChain) {
 			add(" %s ", trueOp);
 			foreach(i, ref tail; ex.tail) {
-				add("(ctx.__temp %s ", opText);
+				add("(_ctx.__temp %s ", opText);
 				addExValue(tail, 1, itemId);
 				add(")");
 				if(i+1 < ex.tail.length) {
@@ -669,25 +679,25 @@ struct GDWriter(Writer) {
 
 	void addDynamicVar(DynamicVar dv) {
 		// Sometimes I need scoped variables.
-		if(dv.var in localVarReplacements) {
-			add(localVarReplacements[dv.var]);
+		if(dv.varName() in localVarReplacements) {
+			add(localVarReplacements[dv.varName()]);
 		}
 		else {
-			add("ctx._vars["); add(Export.quote(dv.var)); add("]");
+			add("_ctx.get_var("); add(Export.quote(dv.varName())); add(")");
 		}
 	}
 
 	void addExValue(ref Expression.Value val, ulong index, int itemId) {
 		val.match!(
 			(Identifier id) {
-				if(!index) { add("ctx."); }
+				if(!index) { add("_ctx."); }
 				add(Export.identReplace(id.name));
 			},
 			(DynamicVar dv) {
 				addDynamicVar(dv);
 			},
 			(RawValue rv) {
-				add("("); add(rv.value[1..$]); add(")");
+				add("("); add(rv.rawText()); add(")");
 			},
 			(PlainText pt) {
 				add(Export.quote(pt.text));
