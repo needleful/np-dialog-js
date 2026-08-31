@@ -112,6 +112,7 @@ struct Expression {
 			case "break": goto case;
 			case "enter": goto case;
 			case "back":  goto case;
+			case "start_file":  goto case;
 			case "exit":
 				return true;
 			default:

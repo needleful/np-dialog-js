@@ -190,7 +190,7 @@ struct GDWriter(Writer) {
 						},
 						(DynamicVar dv) {
 							varsUsed[dv.varName()] = true;
-							localVarReplacements[arg.get!DynamicVar.var] = "_arg%d".format(i);
+							localVarReplacements[dv.varName()] = "_arg%d".format(i);
 							add("true");
 						},
 						(_) => add("true")
@@ -213,9 +213,9 @@ struct GDWriter(Writer) {
 			}
 			addLine(":");
 			indent();
-			foreach(dv, _; varsUsed) {
+			foreach(key, _; varsUsed) {
 				addIndented("_ctx.declare(%s, %s)",
-					Export.quote(dv), localVarReplacements[dv]);
+					Export.quote(key), localVarReplacements[key]);
 			}
 			addIndented("return %d", label.destination);
 			unindent();
@@ -342,7 +342,7 @@ struct GDWriter(Writer) {
 						},
 						(DynamicVar dv) {
 							varsUsed[dv.varName()] = true;
-							localVarReplacements[arg.get!DynamicVar.var] = "_args[%d]".format(i);
+							localVarReplacements[dv.varName()] = "_args[%d]".format(i);
 						},
 						(_) {}
 					);
