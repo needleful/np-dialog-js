@@ -1,0 +1,9 @@
+// Two identical expressions, taken from a real sample
+[exit: [-> 
+	[game set_stat: linda/attic_quest | #90]
+	+ [main_speaker update: linda/black_key_found | Linda's going to her parent's bedroom on the second floor.]]]
+[exit: [-> [game set_stat: linda/attic_quest | #90] + [main_speaker update: linda/black_key_found | Linda's going to her parent's bedroom on the second floor.]]]
+// One combined and two separate conditions
+[this][that]
+[this]
+[that]

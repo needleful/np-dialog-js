@@ -319,6 +319,12 @@ ParseResult parse(string text, Token[] tokens) {
 					head = false;	
 				}
 				break;
+			case Tok.newLine:
+				break;
+			case Tok.indent:
+				break;
+			case Tok.unindent:
+				break;
 			default:
 				head = false;
 				break;

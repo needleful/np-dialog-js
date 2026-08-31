@@ -151,6 +151,7 @@ Tokenization tokenize(string text) {
 	int c = 0;
 	Tokenization result;
 	string lowerText = text.toLower();
+	bool skipNewline = false;
 
 	static rxWhitespace = ctRegex!r"^[\t ]+";
 	static any = ctRegex!r"^.";
@@ -177,7 +178,10 @@ Tokenization tokenize(string text) {
 	}
 	uint skipWhiteSpace() {
 		int skipped = 0;
-		while(isGood() && (text[c] == ' ' || text[c] == '\t')) {
+		while(isGood() && 
+			(text[c] == ' ' || text[c] == '\t' 
+				|| (skipNewline && (text[c] == '\n' || text[c] == '\r')))) 
+		{
 			skipped ++;
 			c ++;
 		}
@@ -241,14 +245,15 @@ Tokenization tokenize(string text) {
 		}
 		return null;
 	}
-	void tokenizeExpression() {
+	void tokenizeExpression(bool recurse) {
+		skipNewline = true;
 		int start = c;
 		// Optional starting operator
 		matchesOp();
 		// Required starting identifier or sub-expression
 		bool valid = false;
 		if(matchesString(Tok.exStart, "[")) {
-			tokenizeExpression();
+			tokenizeExpression(true);
 			valid = true;
 		}
 		else {
@@ -259,11 +264,7 @@ Tokenization tokenize(string text) {
 			);
 		}
 		if(!valid) {
-			if(matchesString(Tok.exStart, "[")) {
-			}
-			else {
-				pushErrorTk("Could not parse expression: no starting identifier", "", start);
-			}
+			pushErrorTk("Could not parse expression: no starting identifier", "", start);
 		}
 		// Function head
 		while(isGood()) {
@@ -271,10 +272,12 @@ Tokenization tokenize(string text) {
 			if(matchesOp())
 				break;
 			if(matchesString(Tok.exEnd, "]")) {
+				skipNewline = recurse;
 				return;
 			}
 			if(matchesString(Tok.exStart, "[")) {
-				tokenizeExpression();
+				tokenizeExpression(true);
+				continue;
 			}
 			matchesRegex(Tok.invalid, any);
 		}
@@ -289,14 +292,16 @@ Tokenization tokenize(string text) {
 				continue;
 			}
 			if(matchesString(Tok.exStart, "[")) {
-				tokenizeExpression();
+				tokenizeExpression(true);
 				continue;
 			}
 			if(matchesString(Tok.exEnd, "]")) {
+				skipNewline = recurse;
 				return;
 			}
 			matchesRegex(Tok.invalid, any);
 		}
+		skipNewline = recurse;
 	}
 	void tokenizeLabel() {
 		enum LabelTokState {
@@ -328,7 +333,7 @@ Tokenization tokenize(string text) {
 			}
 		}
 		while(matchesString(Tok.exStart, "[")) {
-			tokenizeExpression();
+			tokenizeExpression(false);
 		}
 		if(matchesString(Tok.labelOpBlockName, "->")) {
 			if(!matchesIdentifer()) {
@@ -389,13 +394,13 @@ Tokenization tokenize(string text) {
 		}
 		if(state < State.text) {
 			if(matchesString(Tok.exStart, "[")) {
-				tokenizeExpression();
+				tokenizeExpression(false);
 				skipWhiteSpace();
 				continue;
 			}
 		}
 		if(matchesString(Tok.markInterpolate, "#[")) {
-			tokenizeExpression();
+			tokenizeExpression(false);
 			state = State.text;
 			continue;
 		}

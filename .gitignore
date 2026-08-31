@@ -15,3 +15,4 @@ np-dialog-compiler-test-*
 *.o
 *.obj
 *.lst
+.vs/*

@@ -92,6 +92,7 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/08_block_names.dialog");
 		fnTest("tests/09_list_args.dialog");
 		fnTest("tests/10_thunk.dialog");
+		fnTest("tests/11_newlines.dialog");
 	}
 	else {
 		fnTest(source);
@@ -151,6 +152,7 @@ void testTokenize(string filePath) {
 	}
 	Tokenization tkResult = tokenize(source);
 	writefln("-- TOKENIZED: %s --", filePath);
+	writeln("% Errors: ", tkResult.errors);
 	foreach(Token tk; tkResult.tokens) {
 		writefln(" %s [%s]", tk.type, source.tkText(tk));
 	}
