@@ -557,8 +557,8 @@ struct GDWriter(Writer) {
 		}
 	}
 
-	void addExpression(ref Expression ex, int itemId) {
-		add("(");
+	void addExpression(ref Expression ex, int itemId, bool parentheses = true) {
+		if(parentheses) add("(");
 		bool complex = complexOperatorChaining(ex);
 		if(complex) {
 			// Have to assign to a temporary value to chain operators
@@ -571,50 +571,97 @@ struct GDWriter(Writer) {
 				add("abs");
 			}
 			else if(op.text == "->") {
-				indent();
-				addLine("");
-				addIndented("func():");
-				indent();
-				addIndentation();
-				add("return ");
+				addThunkHead();
 			}
 			else {
 				add(op.text);
 			}
 			add("(");
 		}
-		foreach(i, ref headVal; ex.head) {
-			addExValue(headVal, i, itemId);
-			if(i + 1 < ex.head.length) {
-				add(".");
-			}
-		}
-
-		if(!ex.tail.length) {
-			// Only current postfix operator is {?},
-			// which turns a function call into a variable access
-			// So we just add () if there's no operators
-			if(!ex.endOps.length) {
-				add("()");
-			}
+		if(ex.endOps.length && ex.endOps[0].text == "->"){
+			addLambda(ex, itemId);
 		}
 		else {
-			if(complex) {
-				add(")), _ctx.__temp ");
+			foreach(i, ref headVal; ex.head) {
+				addExValue(headVal, i, itemId);
+				if(i + 1 < ex.head.length) {
+					add(".");
+				}
 			}
-			addArguments(ex, complex, itemId);
-		}
-
-		for(ulong i = ex.startOps.length; i > 0; i--) {
-			if(ex.startOps[cast(long)i - 1].text == "->") {
-				add(")");
-				unindent(2);
+			if(!ex.tail.length) {
+				// Only current postfix operator is {?},
+				// which turns a function call into a variable access
+				// So we just add () if there's no operators
+				if(!ex.endOps.length) {
+					add("()");
+				}
 			}
 			else {
-				add(")");
+				if(complex) {
+					add(")), _ctx.__temp ");
+				}
+				addArguments(ex, complex, itemId);
 			}
 		}
-		add(")");
+		for(ulong i = ex.startOps.length; i > 0; i--) {
+			add(")");
+			if(ex.startOps[cast(long)i - 1].text == "->") {
+				unindent(2);
+			}
+		}
+		if(parentheses) add(")");
+	}
+
+	void addThunkHead() {
+		indent();
+		addLine("");
+		addIndented("func():");
+		indent();
+		addIndentation();
+		add("return ");
+	}
+
+	void addLambda(ref Expression ex, int itemId) {
+		// Function head
+		string[] args;
+		indent();
+		addLine("");
+		addIndentation();
+		add("func(");
+		foreach(ulong i, ref val; ex.head) {
+			val.match!(
+				(Identifier id) {
+					if(id.name == "_" && !args.length) {
+						return;
+					}
+					args ~= Export.identReplace(id.name);
+				},
+				(value) {
+					errors ~= NPError(
+						format("Unexpected value in argument list: [%s]. Only identifiers are supported.", value), itemId);
+				}
+			);
+		}
+		add("%s):", args.join(", "));
+		indent();
+		// Body
+		if(!ex.tail.length) {
+			addLine("");
+			addIndentation();
+			add("pass");
+		}
+		foreach(ulong i, ref val; ex.tail) {
+			addLine("");
+			addIndentation();
+			if(i + 1 == ex.tail.length) {
+				add("return ");
+				addExValue(val, 0, itemId, true);
+			}
+			else {
+				addExValue(val, 0, itemId, false);
+			}
+		}
+		unindent(2);
 	}
 
 	bool complexOperatorChaining(ref Expression ex) {
@@ -687,7 +734,7 @@ struct GDWriter(Writer) {
 		}
 	}
 
-	void addExValue(ref Expression.Value val, ulong index, int itemId) {
+	void addExValue(ref Expression.Value val, ulong index, int itemId, bool parentheses = true) {
 		val.match!(
 			(Identifier id) {
 				if(!index) { add("_ctx."); }
@@ -697,13 +744,15 @@ struct GDWriter(Writer) {
 				addDynamicVar(dv);
 			},
 			(RawValue rv) {
-				add("("); add(rv.rawText()); add(")");
+				if(parentheses) add("(");
+				add(rv.rawText());
+				if(parentheses) add(")");
 			},
 			(PlainText pt) {
 				add(Export.quote(pt.text));
 			},
 			(Expression ex) {
-				addExpression(ex, itemId);
+				addExpression(ex, itemId, parentheses);
 			}
 		);
 	}

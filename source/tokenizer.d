@@ -127,7 +127,7 @@ static immutable OpFlags[string] operators = [
 	"!": OpFlags.prefix,
 
 	// Lambda/thunk operator
-	"->": OpFlags.prefix,
+	"->": OpFlags.prefix | OpFlags.infix,
 
 	// Specify that we're accessing a property, not calling a method
 	"?": OpFlags.postfix,
@@ -263,7 +263,7 @@ Tokenization tokenize(string text) {
 				|| matchesRawValue()
 			);
 		}
-		if(!valid) {
+		if(!valid && !matchesString(Tok.exStart, "[")) {
 			pushErrorTk("Could not parse expression: no starting identifier", "", start);
 		}
 		// Function head
@@ -277,9 +277,10 @@ Tokenization tokenize(string text) {
 			}
 			if(matchesString(Tok.exStart, "[")) {
 				tokenizeExpression(true);
-				continue;
 			}
-			matchesRegex(Tok.invalid, any);
+			else {
+				matchesRegex(Tok.invalid, any);
+			}
 		}
 		// Function arguments
 		while(isGood()) {
@@ -291,15 +292,17 @@ Tokenization tokenize(string text) {
 			) {
 				continue;
 			}
-			if(matchesString(Tok.exStart, "[")) {
+			else if(matchesString(Tok.exStart, "[")) {
 				tokenizeExpression(true);
 				continue;
 			}
-			if(matchesString(Tok.exEnd, "]")) {
+			else if(matchesString(Tok.exEnd, "]")) {
 				skipNewline = recurse;
 				return;
 			}
-			matchesRegex(Tok.invalid, any);
+			else {
+				matchesRegex(Tok.invalid, any);
+			}
 		}
 		skipNewline = recurse;
 	}
