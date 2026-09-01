@@ -35,6 +35,15 @@ string gdTypeName(ParseNode.Type type) {
 	return "NPDialogItem.Type."~type.to!string();
 }
 
+string escapeText(RawValue rv) {
+	if(rv.isSimple()) {
+		return rv.rawText();
+	}
+	else {
+		return "(" ~ rv.rawText() ~ ")";
+	}
+}
+
 struct GDWriter(Writer) {
 	DialogSequence* seq;
 	Writer wr;
@@ -186,7 +195,8 @@ struct GDWriter(Writer) {
 							add("_arg%d == %s", i, Export.quote(pt.text));
 						},
 						(RawValue rv) {
-							add("_arg%d == (%s)", i, rv.rawText());
+							add("_arg%d == ", i);
+							addRawValue(rv);
 						},
 						(DynamicVar dv) {
 							varsUsed[dv.varName()] = true;
@@ -338,7 +348,7 @@ struct GDWriter(Writer) {
 							usedVars ~= maskItems[pt.text];
 						},
 						(RawValue rv) {
-							argReq ~= format("_args[%d] == (%s)", i, rv.rawText());
+							argReq ~= format("_args[%d] == %s", i, rv.escapeText());
 						},
 						(DynamicVar dv) {
 							varsUsed[dv.varName()] = true;
@@ -405,7 +415,7 @@ struct GDWriter(Writer) {
 					return true;
 				},
 				(RawValue rv) {
-					add("("); add(rv.rawText()); add(")");
+					addRawValue(rv);
 					return true;
 				},
 				(DynamicVar dv) {
@@ -489,7 +499,7 @@ struct GDWriter(Writer) {
 				indent();
 				foreach(ref ev; values) {
 					addIndentation();
-					addExValue(ev, 1, item.id);
+					addExValue(ev, 1, item.id, false);
 					addLine(",");
 				}
 				unindent();
@@ -539,7 +549,7 @@ struct GDWriter(Writer) {
 					continue;
 				}
 				add(", ");
-				addExValue(arg, 1, item.id);
+				addExValue(arg, 1, item.id, false);
 			}
 			if(fn == "goto") {
 				add(")");
@@ -558,6 +568,10 @@ struct GDWriter(Writer) {
 	}
 
 	void addExpression(ref Expression ex, int itemId, bool parentheses = true) {
+		// Slightly reduce parentheses by not wrapping function calls
+		if(ex.isSingle() || (ex.startOps.length == 0 && ex.isFunctionCall())) {
+			parentheses = false;
+		}
 		if(parentheses) add("(");
 		bool complex = complexOperatorChaining(ex);
 		if(complex) {
@@ -583,7 +597,7 @@ struct GDWriter(Writer) {
 		}
 		else {
 			foreach(i, ref headVal; ex.head) {
-				addExValue(headVal, i, itemId);
+				addExValue(headVal, i, itemId, true);
 				if(i + 1 < ex.head.length) {
 					add(".");
 				}
@@ -600,7 +614,7 @@ struct GDWriter(Writer) {
 				if(complex) {
 					add(")), _ctx.__temp ");
 				}
-				addArguments(ex, complex, itemId);
+				addArguments(ex, complex, itemId, parentheses);
 			}
 		}
 		for(ulong i = ex.startOps.length; i > 0; i--) {
@@ -655,7 +669,7 @@ struct GDWriter(Writer) {
 			addIndentation();
 			if(i + 1 == ex.tail.length) {
 				add("return ");
-				addExValue(val, 0, itemId, true);
+				addExValue(val, 0, itemId, false);
 			}
 			else {
 				addExValue(val, 0, itemId, false);
@@ -668,7 +682,7 @@ struct GDWriter(Writer) {
 		return ex.endOps.length == 1 && ex.tail.length > 1 && Export.opBoolChain.canFind(ex.endOps[0].text);
 	}
 
-	void addArguments(ref Expression ex, bool complexChain, int itemId) {
+	void addArguments(ref Expression ex, bool complexChain, int itemId, bool parentheses) {
 		if(ex.endOps.length != 1) {
 			errors ~= NPError("Only one infix operator is allowed.", itemId);
 			return;
@@ -676,7 +690,7 @@ struct GDWriter(Writer) {
 		string originalOp = ex.endOps[0].text;
 		string opText = originalOp;
 		string end = "";
-		if(opText == ":") {
+		if(ex.isFunctionCall()) {
 			add("(");
 			end = ")";
 		}
@@ -698,7 +712,7 @@ struct GDWriter(Writer) {
 			add(" %s ", trueOp);
 			foreach(i, ref tail; ex.tail) {
 				add("(_ctx.__temp %s ", opText);
-				addExValue(tail, 1, itemId);
+				addExValue(tail, 1, itemId, parentheses);
 				add(")");
 				if(i+1 < ex.tail.length) {
 					add(" && ");
@@ -714,7 +728,7 @@ struct GDWriter(Writer) {
 				add("%s", trueOp);
 			}
 			foreach(i, ref tail; ex.tail) {
-				addExValue(tail, 1, itemId);
+				addExValue(tail, 1, itemId, parentheses);
 
 				if(i+1 < ex.tail.length) {
 					add("%s ", opText);
@@ -734,7 +748,7 @@ struct GDWriter(Writer) {
 		}
 	}
 
-	void addExValue(ref Expression.Value val, ulong index, int itemId, bool parentheses = true) {
+	void addExValue(ref Expression.Value val, ulong index, int itemId, bool parentheses) {
 		val.match!(
 			(Identifier id) {
 				if(!index) { add("_ctx."); }
@@ -744,9 +758,7 @@ struct GDWriter(Writer) {
 				addDynamicVar(dv);
 			},
 			(RawValue rv) {
-				if(parentheses) add("(");
-				add(rv.rawText());
-				if(parentheses) add(")");
+				addRawValue(rv);
 			},
 			(PlainText pt) {
 				add(Export.quote(pt.text));
@@ -755,6 +767,9 @@ struct GDWriter(Writer) {
 				addExpression(ex, itemId, parentheses);
 			}
 		);
+	}
+	void addRawValue(RawValue rv) {
+		add(rv.escapeText());
 	}
 
 private:

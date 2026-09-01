@@ -1,7 +1,9 @@
 
 module np.dialog.parser;
 
+import std.algorithm: canFind;
 import std.format;
+import std.regex;
 import std.stdio;
 import std.string;
 import std.sumtype;
@@ -36,6 +38,11 @@ struct RawValue {
 	}
 	string rawText() const {
 		return value[1..$];
+	}
+	// An identifier or number
+	bool isSimple() const {
+		static rxSimple = "^#([0-9]+|[a-z_A-Z])$";
+		return !value.matchFirst(rxSimple).empty();
 	}
 }
 struct PlainText {
@@ -118,6 +125,14 @@ struct Expression {
 			default:
 				return false;
 		}
+	}
+
+	bool isFunctionCall() {
+		return endOps.length == 1 && endOps[0].text == ":";
+	}
+
+	bool isSingle() {
+		return !startOps.length && !endOps.length && !tail.length;
 	}
 
 	bool isCtEffect() const {

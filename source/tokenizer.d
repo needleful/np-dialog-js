@@ -153,7 +153,6 @@ Tokenization tokenize(string text) {
 	string lowerText = text.toLower();
 	bool skipNewline = false;
 
-	static rxWhitespace = ctRegex!r"^[\t ]+";
 	static any = ctRegex!r"^.";
 
 	string front() {
