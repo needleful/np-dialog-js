@@ -254,9 +254,11 @@ struct GDWriter(Writer) {
 		/// If there's more than 64 values, we'll just make an array of integers and compare that.
 		ulong[string] maskItems;
 		bool anyAllowedLabels = false;
+		// Special case for catch-all labels
+		ulong catchAlls = 0;
 
 		// TODO: what to do about dynamic arguments in special functions?
-		foreach(ref label; set.labels) {
+		foreach(ulong i, ref label; set.labels) {
 			bool allowed = true;
 			foreach(ref arg; label.arguments) {
 				if(arg.has!PlainText) {
@@ -267,6 +269,9 @@ struct GDWriter(Writer) {
 				}
 				else if(arg.has!DynamicVar){
 					allowed = false;
+				}
+				else if(arg.has!(Label.CatchAll)) {
+					catchAlls ++;
 				}
 			}
 			anyAllowedLabels |= allowed;
@@ -309,18 +314,21 @@ struct GDWriter(Writer) {
 				}
 			}
 			unindent();
-			if(tooBig) {
-				addIndented("if argSet.size() == 0:");
-				indent();
-				addIndented("return NPDialogFound.invalid()");
-				unindent();
-				addIndented("argSet.sort()");
-			}
-			else {
-				addIndented("if argMask == 0:");
-				indent();
-				addIndented("return NPDialogFound.invalid()");
-				unindent();
+			// TODO: optimize cases where catchalls exist
+			if(catchAlls == 0) {
+				if(tooBig) {
+					addIndented("if argSet.size() == 0:");
+					indent();
+					addIndented("return NPDialogFound.invalid()");
+					unindent();
+					addIndented("argSet.sort()");
+				}
+				else {
+					addIndented("if argMask == 0:");
+					indent();
+					addIndented("return NPDialogFound.invalid()");
+					unindent();
+				}
 			}
 		}
 		bool guaranteed = false;
