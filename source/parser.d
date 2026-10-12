@@ -83,9 +83,27 @@ struct Op {
 }
 
 alias TextValue = SumType!(DynamicVar, PlainText, Expression, Tag);
+alias ExArgument = SumType!(Identifier, DynamicVar, RawValue, PlainText, Expression, ArgList);
+
+struct ArgList {
+	alias Value = ExArgument;
+	Value[] data;
+	void appendTail(T)(T v) {
+		Value val = v;
+		data ~= val;
+	}
+	string toString() const{
+		import std.array;
+		string[] strings = [];
+		foreach(item; data) {
+			strings ~= item.toString();
+		}
+		return "[" ~ strings.join(", ") ~ "]";
+	}
+}
 
 struct Expression {
-	alias Value = SumType!(Identifier, DynamicVar, RawValue, PlainText, Expression);
+	alias Value = ExArgument;
 	Value[] head;
 	Value[] tail;
 	Op[] startOps;
@@ -345,27 +363,49 @@ ParseResult parse(string text, Token[] tokens) {
 				break;
 			}
 		}
-		while(isGood()) {
-			auto tk = pop();
+		bool appendBasicArg(T)(Token tk, ref T host) {
 			switch(tk.type) {
 			case Tok.exIdentifier:
-				exResult.appendTail(Identifier(text.tkText(tk)));
-				break;
+				host.appendTail(Identifier(text.tkText(tk)));
+				return true;
 			case Tok.exDynamicVar:
-				exResult.appendTail(DynamicVar(text.tkText(tk)));
-				break;
+				host.appendTail(DynamicVar(text.tkText(tk)));
+				return true;
 			case Tok.exRawValue:
-				exResult.appendTail(RawValue(text.tkText(tk)));
-				break;
+				host.appendTail(RawValue(text.tkText(tk)));
+				return true;
 			case Tok.exText:
-				exResult.appendTail(PlainText(text.tkText(tk).strip()));
+				host.appendTail(PlainText(text.tkText(tk).strip()));
+				return true;
+			case Tok.exStart:
+				exResult.appendTail(parseExpression());
+				return true;
+			default:
+				return false;
+			}
+		}
+		while(isGood()) {
+			auto tk = pop();
+			if(appendBasicArg(tk, exResult)) {
+				continue;
+			}
+			switch(tk.type) {
+			case Tok.exArgSplit:
 				break;
 			case Tok.exEnd:
 				return validate();
-			case Tok.exStart:
-				exResult.appendTail(parseExpression());
-				break;
-			case Tok.exArgSplit:
+			case Tok.exListStart:
+				auto list = ArgList();
+				while(isGood()) {
+					auto tk2 = peek();
+					if(appendBasicArg(tk2, list)) {
+						pop();
+					}
+					else {
+						break;
+					}
+				}
+				exResult.appendTail(list);
 				break;
 			default:
 				pushTkError("Invalid argument: " ~ text.tkText(tk), c-1);

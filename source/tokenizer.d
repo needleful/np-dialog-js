@@ -33,6 +33,7 @@ enum Tok {
 	exDynamicVar,
 	exEscape,
 	exLambdaStart,
+	exListStart,
 
 	labelArgsStart,
 	labelArgsEnd,
@@ -281,18 +282,29 @@ Tokenization tokenize(string text) {
 				matchesRegex(Tok.invalid, any);
 			}
 		}
+
+		bool tokenizeArgument(bool allowWhiteSpace) {
+			static exTextFull = ctRegex!r"^[^\[\]\\|]+";
+			static exTextWord = ctRegex!r"^[^\[\]\\|\s]+";
+			if(matchesString(Tok.exStart, "[")) {
+				tokenizeExpression(true);
+				return true;
+			}
+			return matchesDynVar()
+				|| matchesRawValue()
+				|| matchesRegex(Tok.exText, allowWhiteSpace? exTextFull: exTextWord);
+		}
+
 		// Function arguments
 		while(isGood()) {
-			static exText = ctRegex!r"^[^\[\]\\|]+";
-			if(matchesString(Tok.exArgSplit, "|")
-				|| matchesDynVar()
-				|| matchesRawValue()
-				|| matchesRegex(Tok.exText, exText)
-			) {
-				continue;
+			if(matchesString(Tok.exListStart, "+")) {
+				while(isGood()) {
+					if(!tokenizeArgument(false)) {
+						break;
+					}
+				}
 			}
-			else if(matchesString(Tok.exStart, "[")) {
-				tokenizeExpression(true);
+			if(matchesString(Tok.exArgSplit, "|") || tokenizeArgument(true)) {
 				continue;
 			}
 			else if(matchesString(Tok.exEnd, "]")) {

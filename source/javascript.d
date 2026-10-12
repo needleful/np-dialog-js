@@ -217,6 +217,16 @@ private:
 			(PlainText pt) {
 				add(Export.quote(pt.text));
 			},
+			(ArgList list) {
+				add("[");
+				foreach(i, ref val; list.data) {
+					addExValue(val, index, itemId);
+					if(i + 1 < list.data.length) {
+						add(", ");
+					}
+				}
+				add("]");
+			},
 			(Expression ex) {
 				addExpression(ex, itemId);
 			}
