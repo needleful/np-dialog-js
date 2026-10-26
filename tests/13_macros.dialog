@@ -1,0 +1,7 @@
+[loop]
+	> [ask_once] Hello.
+		Right. Hellow.
+	> [ask_once] Goodbye.
+		You're not leaving.
+	> [breaker] I guess that's all there is.
+		[break]

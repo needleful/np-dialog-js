@@ -595,12 +595,19 @@ ParseResult baseParse(string text, Token[] tokens) {
 }
 
 struct MacroState {
-	int maxLoops = 0;
 	int currentLoop = -1;
 	int[string] namedLoops;
+	int[string] ids;
 	
 	int uniqueLoopId() {
-		return ++maxLoops;
+		return uniqueId("loop");
+	}
+
+	int uniqueId(string id) {
+		if(id !in ids) {
+			ids[id] = 0;
+		}
+		return ++ids[id];
 	}
 
 	int indexOf(string id) {
@@ -609,7 +616,7 @@ struct MacroState {
 			index = namedLoops[id];
 		}
 		else {
-			index = maxLoops;
+			index = currentLoop;
 		}
 		return index;
 	}
@@ -625,8 +632,9 @@ struct MacroState {
 	}
 }
 
-void applyMacros(string text, ref ParseResult tree, ref ParseNode node, MacroState ms) {
+void applyMacros(string text, ref ParseResult tree, ref ParseNode node, ref MacroState ms) {
 	string addedLoop;
+	int prevloop = ms.currentLoop;
 	if(node.controlFlow.isIdentifier("loop")) {
 		Expression ex = node.controlFlow;
 		int loopId = ms.uniqueLoopId();
@@ -704,16 +712,41 @@ void applyMacros(string text, ref ParseResult tree, ref ParseNode node, MacroSta
 		node.controlFlow.appendHead(Identifier("goto"));
 		node.controlFlow.appendTail(PlainText(ms.loopEnd(loopName)));
 	}
+	foreach(ulong i, ref Expression ex; node.conditions) {
+		if(ex.isIdentifier("ask_once")) {
+			Expression.Value label;
+			if(ex.tail.length) {
+				label = ex.tail[0];
+			}
+			else {
+				label = PlainText("_q_"~ms.uniqueId("ask_once").to!string());
+			}
+			Expression replacement;
+			replacement.appendHead(Identifier("mentioned"));
+			replacement.tail ~= label;
+			replacement.startOps ~= Op("!");
+			node.conditions[i] = replacement;
+
+			Expression mention;
+			mention.appendHead(Identifier("mention"));
+			mention.appendTail(label);
+			ParseNode tail;
+			tail.conditions ~= mention;
+			node.children ~= tail;
+		}
+	}
 	foreach(ref ParseNode pn; node.children) {
 		applyMacros(text, tree, pn, ms);
 	}
 	if(addedLoop) {
 		ms.namedLoops.remove(addedLoop);
 	}
+	ms.currentLoop = prevloop;
 }
 
 ParseResult parse(string text, Token[] tokens) {
 	ParseResult tree = baseParse(text, tokens);
-	applyMacros(text, tree, tree.root, MacroState());
+	MacroState ms;
+	applyMacros(text, tree, tree.root, ms);
 	return tree;
 }
