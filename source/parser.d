@@ -281,37 +281,6 @@ struct Label {
 	}
 }
 
-struct MacroState {
-	int maxLoops = 0;
-	int currentLoop = -1;
-	int[string] namedLoops;
-	
-	int uniqueLoopId() {
-		return ++maxLoops;
-	}
-
-	int indexOf(string id) {
-		int index;
-		if(id in namedLoops) {
-			index = namedLoops[id];
-		}
-		else {
-			index = maxLoops;
-		}
-		return index;
-	}
-
-	string loopStart(string id = "") {
-		int index = indexOf(id);
-		return "_loop_start_"~index.to!string();
-	}
-
-	string loopEnd(string id = "") {
-		int index = indexOf(id);
-		return "_loop_end_"~index.to!string();
-	}
-}
-
 ParseResult baseParse(string text, Token[] tokens) {
 	int c = 0;
 	Token peek() {
@@ -623,6 +592,37 @@ ParseResult baseParse(string text, Token[] tokens) {
 		}
 	}
 	return result;
+}
+
+struct MacroState {
+	int maxLoops = 0;
+	int currentLoop = -1;
+	int[string] namedLoops;
+	
+	int uniqueLoopId() {
+		return ++maxLoops;
+	}
+
+	int indexOf(string id) {
+		int index;
+		if(id in namedLoops) {
+			index = namedLoops[id];
+		}
+		else {
+			index = maxLoops;
+		}
+		return index;
+	}
+
+	string loopStart(string id = "") {
+		int index = indexOf(id);
+		return "_loop_start_"~index.to!string();
+	}
+
+	string loopEnd(string id = "") {
+		int index = indexOf(id);
+		return "_loop_end_"~index.to!string();
+	}
 }
 
 void applyMacros(string text, ref ParseResult tree, ref ParseNode node, MacroState ms) {
