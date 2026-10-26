@@ -93,6 +93,7 @@ void testAll(void function(string) fnTest, string source = null) {
 		fnTest("tests/09_list_args.dialog");
 		fnTest("tests/10_thunk.dialog");
 		fnTest("tests/11_newlines.dialog");
+		fnTest("tests/12_loops.dialog");
 	}
 	else {
 		fnTest(source);

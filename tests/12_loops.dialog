@@ -1,0 +1,25 @@
+[loop]
+	Hey.
+	> Why this
+		Because.
+	> Why that.
+		Because uh
+	> [breaker] Bye.
+		[break]
+Ok that's it.
+[loop: loop1]
+	:another_label
+	[loop][! mentioned: condition]
+		Another loop.
+		> [breaker] I will break the loop.
+			Just one? Or both?
+			> One
+				[mention: condition]
+			> THe whole shebang
+				[break: loop1]
+		> ok
+		> no way
+			[continue: loop1]
+		ebic
+	Habeeb it.
+[exit]

@@ -1,7 +1,8 @@
 
 module np.dialog.parser;
 
-import std.algorithm: canFind;
+import std.algorithm: canFind, remove;
+import std.conv;
 import std.format;
 import std.regex;
 import std.stdio;
@@ -131,14 +132,15 @@ struct Expression {
 			return false;
 		}
 		switch(v) {
+			case "exit":  goto case;
 			case "otherwise": goto case;
 			case "goto": goto case;
 			case "loop": goto case;
 			case "break": goto case;
 			case "enter": goto case;
 			case "back":  goto case;
-			case "start_file":  goto case;
-			case "exit":
+			case "continue":  goto case;
+			case "start_file":
 				return true;
 			default:
 				return false;
@@ -279,7 +281,38 @@ struct Label {
 	}
 }
 
-ParseResult parse(string text, Token[] tokens) {
+struct MacroState {
+	int maxLoops = 0;
+	int currentLoop = -1;
+	int[string] namedLoops;
+	
+	int uniqueLoopId() {
+		return ++maxLoops;
+	}
+
+	int indexOf(string id) {
+		int index;
+		if(id in namedLoops) {
+			index = namedLoops[id];
+		}
+		else {
+			index = maxLoops;
+		}
+		return index;
+	}
+
+	string loopStart(string id = "") {
+		int index = indexOf(id);
+		return "_loop_start_"~index.to!string();
+	}
+
+	string loopEnd(string id = "") {
+		int index = indexOf(id);
+		return "_loop_end_"~index.to!string();
+	}
+}
+
+ParseResult baseParse(string text, Token[] tokens) {
 	int c = 0;
 	Token peek() {
 		return tokens[c];
@@ -590,4 +623,97 @@ ParseResult parse(string text, Token[] tokens) {
 		}
 	}
 	return result;
+}
+
+void applyMacros(string text, ref ParseResult tree, ref ParseNode node, MacroState ms) {
+	string addedLoop;
+	if(node.controlFlow.isIdentifier("loop")) {
+		Expression ex = node.controlFlow;
+		int loopId = ms.uniqueLoopId();
+		ms.currentLoop = loopId;
+
+		if(ex.tail.length) {
+			string loopName = "";
+			auto name = ex.tail[0];
+			if(!name.has!PlainText()) {
+				tree.errors ~= NPError(
+					"[loop] only accepts a plain, compile-time string as an argument",
+					node.tkStart);
+			}
+			else {
+				loopName = name.get!PlainText().text;
+			}
+			if(loopName in ms.namedLoops) {
+				tree.errors ~= NPError("Duplicate loop name: "~loopName, node.tkStart);
+			}
+			else {
+				ms.namedLoops[loopName] = loopId;
+				addedLoop = loopName;
+			}
+		}
+		node.controlFlow = Expression();
+		node.labels ~= Label(ms.loopStart(), "");
+		
+		ParseNode loopBack;
+		loopBack.controlFlow.appendHead(Identifier("continue"));
+		node.children ~= loopBack;
+
+		ParseNode loopEnd;
+		loopEnd.labels ~= Label(ms.loopEnd(), "");
+		node.children ~= loopEnd;
+	}
+	else if(node.controlFlow.isIdentifier("continue")) {
+		Expression ex = node.controlFlow;
+		string loopName = "";
+		if(ex.tail.length) {
+			auto name = ex.tail[0];
+			if(!name.has!PlainText()) {
+				tree.errors ~= NPError(
+					"[continue] only accepts a plain, compile-time string as an argument",
+					node.tkStart);
+			}
+			else {
+				loopName = name.get!PlainText().text;
+			}
+			if(loopName !in ms.namedLoops) {
+				tree.errors ~= NPError("Unknown loop name: "~loopName, node.tkStart);
+			}
+		}
+		node.controlFlow = Expression();
+		node.controlFlow.appendHead(Identifier("goto"));
+		node.controlFlow.appendTail(PlainText(ms.loopStart(loopName)));
+	}
+	else if(node.controlFlow.isIdentifier("break")) {
+		Expression ex = node.controlFlow;
+		string loopName = "";
+		if(ex.tail.length) {
+			auto name = ex.tail[0];
+			if(!name.has!PlainText()) {
+				tree.errors ~= NPError(
+					"[break] only accepts a plain, compile-time string as an argument",
+					node.tkStart);
+			}
+			else {
+				loopName = name.get!PlainText().text;
+			}
+			if(loopName !in ms.namedLoops) {
+				tree.errors ~= NPError("Unknown loop name: "~loopName, node.tkStart);
+			}
+		}
+		node.controlFlow = Expression();
+		node.controlFlow.appendHead(Identifier("goto"));
+		node.controlFlow.appendTail(PlainText(ms.loopEnd(loopName)));
+	}
+	foreach(ref ParseNode pn; node.children) {
+		applyMacros(text, tree, pn, ms);
+	}
+	if(addedLoop) {
+		ms.namedLoops.remove(addedLoop);
+	}
+}
+
+ParseResult parse(string text, Token[] tokens) {
+	ParseResult tree = baseParse(text, tokens);
+	applyMacros(text, tree, tree.root, MacroState());
+	return tree;
 }
