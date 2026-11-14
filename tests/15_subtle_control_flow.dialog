@@ -1,0 +1,8 @@
+> Option A
+	> [cond: A] A2
+		Text A2
+	> [cond: B] B2
+		Text B2
+> Option B
+	[exit]
+End

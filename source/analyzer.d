@@ -57,6 +57,9 @@ struct DialogItem {
 		}
 		return null;
 	}
+	bool isOption() const {
+		return type == ParseNode.Type.option;
+	}
 	void printDebug(string indent = "") const {
 		writefln("%s%d: [", indent, id);
 		writefln("%s\t%s", indent, type);
@@ -195,9 +198,8 @@ DialogSequence flatten(ParseNode parsed) {
 // This applies any relationship between child and parent,
 // Plus any control flow that can be deduced at compile-time
 void analyzeControlFlow(ref DialogSequence seq) {
-	int findNext(const(DialogItem)* item) {
+	int findNext(const(DialogItem)* item, bool skipOptions) {
 		int next = item.next;
-		bool skipOptions = item.type == ParseNode.Type.option;
 		while(next >= 0) {
 			DialogItem* diaNext = seq.diaGet(next);
 			if(!diaNext.usesOtherwise() 
@@ -215,6 +217,7 @@ void analyzeControlFlow(ref DialogSequence seq) {
 		if(item.usesTrivialExit()) {
 			enteredSet = true;
 			item.nextOnEnter = -1;
+			writefln("%d: EXIT", item.id);
 		}
 		else if(item.usesSimpleGoto()) {
 			enteredSet = true;
@@ -224,6 +227,7 @@ void analyzeControlFlow(ref DialogSequence seq) {
 				item.nextOnEnter = *s;
 				item.controlFlow.makeEmpty();
 			}
+			writefln("%d: GOTO[%d]", item.id, item.nextOnEnter);
 		}
 		else if(item.child >= 0) {
 			DialogItem* child = seq.diaGet(item.child);
@@ -232,13 +236,15 @@ void analyzeControlFlow(ref DialogSequence seq) {
 			}
 			enteredSet = true;
 			item.nextOnEnter = item.child;
+			writefln("%d: CHILD[%d]", item.id, item.nextOnEnter);
 		}
 
 		if(item.next >= 0) {
-			int foundNext = findNext(&item);
+			int foundNext = findNext(&item, item.isOption());
 			if(!enteredSet) {
 				item.nextOnEnter = foundNext;
 				enteredSet = true;
+				writefln("%d: NEXT[%d]", item.id, item.nextOnEnter);
 			}
 			if(item.type == ParseNode.Type.option) {
 				item.nextOnSkip = foundNext;
@@ -249,13 +255,17 @@ void analyzeControlFlow(ref DialogSequence seq) {
 		}
 		if(item.nextOnEnter == -1) {
 			int parent = item.parent;
+			bool skipOptions = item.isOption();
 			while(parent >= 0) {
 				DialogItem* diaParent = seq.diaGet(parent);
-				int parentNext = findNext(diaParent);
+				// If any node or parent is an option, we skip options
+				skipOptions |= diaParent.isOption();
+				int parentNext = findNext(diaParent, skipOptions);
 				if(parentNext >= 0) {
 					if(!enteredSet) {
 						item.nextOnEnter = parentNext;
 						enteredSet = true;
+						writefln("%d: RECURSIVE[%d]", item.id, item.nextOnEnter);
 					}
 					item.nextOnSkip = parentNext;
 					break;
@@ -264,6 +274,9 @@ void analyzeControlFlow(ref DialogSequence seq) {
 					parent = diaParent.parent;
 				}
 			}
+		}
+		if (!enteredSet) {
+			writefln("%d: ENDING", item.id);
 		}
 		// TODO: check text tags and interpolations
 	}
