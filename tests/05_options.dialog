@@ -1,14 +1,20 @@
 Hello!
 > Hello.
 	How are you?
-	> [day going_well] I'm doing well.
-		Sorry to hear that, champ!
-	> [skip](This option is intentionally left blank.)
-	> [otherwise][skip] Not so hot.
-		you -- I'm alright.
-		That's a shame!
-// A comment to mess things up
-	> I'm /fine/.
+	[player autopilot]
+		you -- great!!!
+	[otherwise][test]
+		you -- testing
+	[otherwise][x]
+		> [day going_well] I'm doing well.
+			Sorry to hear that, champ!
+		> [otherwise][skip] Not so hot.
+			you -- I'm alright.
+			That's a shame!
+	// A comment to mess things up
+		> I'm /fine/.
+		> [skip](This option is intentionally left blank.)
 > Goodbye.
 	[exit]
 Gamer.
+Nexus.

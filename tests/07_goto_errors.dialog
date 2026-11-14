@@ -1,7 +1,6 @@
 [goto: does_not_exist]
 [goto: wrong_arg_count | #1]
 
-
 :wrong_arg_count
 stuff!
 [goto]
