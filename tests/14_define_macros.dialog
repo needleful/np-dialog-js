@@ -1,0 +1,40 @@
+[macro: once | stat]
+	[game get_stat: $$stat]
+		// $HEAD is the content of the message besides the macro call
+		#$HEAD
+		// $CHILDREN is the content of every child
+		#$CHILDREN
+		[game add_stat: $$stat]
+
+[macro: menu]
+	#$HEAD
+	[loop]
+		> (Use an Item)
+			[player show_item_menu]
+		> (Use a Note)
+			[player show_note_label]
+		#$CHILDREN
+
+// Macros are overloaded by operator count
+[macro: menu | count]
+	[define: $$count | #0]
+	// Macros can call other macros
+	[menu] #$HEAD
+		#$CHILDREN
+		[$$count += #1]
+
+[once: discussed/apples]
+	Have I told you about apples?
+	* A lengthy discussion about apples.
+	[menu]
+		> [breaker]Well, that was a thrilling discussion about apples. Goodbye!
+			It sure was!
+			[break]
+[otherwise]
+	We don't need to talk anymore.
+	[menu: $int]
+		> [$int = #0] Surely there's /something/ worth discussing?
+			Nope!
+		> [otherwise][breaker] Fine. Bye.
+			Bye!
+			[break]
