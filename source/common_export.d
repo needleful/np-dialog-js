@@ -1,7 +1,6 @@
 
 module np.dialog.common_export;
 
-
 struct Export {
 	static immutable string[string] opRemap = [
 		":=": "=",

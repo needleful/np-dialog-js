@@ -7,7 +7,6 @@ import std.sumtype;
 import np.dialog.common;
 import np.dialog.parser;
 
-
 // Fully analyzed and flattened shape
 struct DialogItem {
 	int id = -1, previous = -1, next = -1;
