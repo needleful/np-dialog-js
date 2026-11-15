@@ -138,6 +138,10 @@ struct GDWriter(Writer) {
 			if(item.options.length) {
 				add(".with_options(%s)", item.options);
 			}
+			// Need to encode [otherwise] at runtime for options
+			if(item.otherwise && item.isOption()) {
+				add(".with_otherwise()");
+			}
 			addLine(",");
 		}
 		unindent();

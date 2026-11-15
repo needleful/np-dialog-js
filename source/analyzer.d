@@ -22,7 +22,7 @@ struct DialogItem {
 	Expression controlFlow;
 	string speaker;
 	ParseNode.Type type;
-	bool unreferenced;
+	bool unreferenced, otherwise;
 
 	this(int p_id, ref ParseNode ps) {
 		id = p_id;
@@ -248,6 +248,9 @@ void analyzeControlFlow(ref DialogSequence seq) {
 	}
 	// Evaluate basic control flow
 	foreach(ref item; seq.dialog) {
+		if(item.usesOtherwise()) {
+			item.otherwise = true;
+		} 
 		bool enteredSet = false;
 		if(item.usesTrivialExit()) {
 			enteredSet = true;
