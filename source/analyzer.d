@@ -22,6 +22,8 @@ struct DialogItem {
 	Expression controlFlow;
 	string speaker;
 	ParseNode.Type type;
+	bool unreferenced;
+
 	this(int p_id, ref ParseNode ps) {
 		id = p_id;
 		text = ps.text;
@@ -49,6 +51,9 @@ struct DialogItem {
 				&& controlFlow.tail[0].has!(const(PlainText));
 		}
 		return false;
+	}
+	bool unreachable() {
+		return unreferenced;
 	}
 	string getGotoName() const {
 		if(usesSimpleGoto()) 
@@ -129,6 +134,9 @@ struct DialogSequence {
 			LabelEval(l.conditions, l.arguments, destination, l.generateBlockName());
 	}
 	DialogItem* diaGet(int id) {
+		if(id < 0 || id >= dialog.length){
+			return null;
+		}
 		return &dialog[id];
 	}
 	// Only for zero-argument [goto]
@@ -197,19 +205,46 @@ DialogSequence flatten(ParseNode parsed) {
 // Calculate nextOnEnter and nextOnSkip
 // This applies any relationship between child and parent,
 // Plus any control flow that can be deduced at compile-time
+// Also removes unused nodes
 void analyzeControlFlow(ref DialogSequence seq) {
-	int findNext(const(DialogItem)* item, bool skipOptions) {
+	bool[int] referencedNodes = [seq.start: true];
+	foreach(key, index; seq.simpleLabels) {
+		referencedNodes[index] = true;
+	}
+	foreach(ref labelSet; seq.labelSets.values()) {
+		foreach(ref label; labelSet.labels) {
+			referencedNodes[label.destination] = true;
+		}
+	}
+	int findNext(const(DialogItem)* item, bool skipOtherwise, bool skipOptions) {
 		int next = item.next;
 		while(next >= 0) {
 			DialogItem* diaNext = seq.diaGet(next);
-			if(!diaNext.usesOtherwise() 
-				&& (!skipOptions || diaNext.type != ParseNode.Type.option)
-			) {
+			bool otherSkip = skipOtherwise && diaNext.usesOtherwise();
+			bool optionSkip = skipOptions && diaNext.isOption();
+			if(!otherSkip && !optionSkip) {
 				break;
 			}
 			next = diaNext.next;
 		}
 		return next;
+	}
+	int findNextRecurse(const(DialogItem)* item, bool skipOtherwise, bool skipOptions) {
+		while(item) {
+			// If the parent is an option, we skip following options
+			int next = findNext(item, skipOtherwise, skipOptions);
+			if(next >= 0) {
+				return next;
+			}
+			else {
+				item = seq.diaGet(item.parent);
+				if(item) {
+					skipOptions |= item.isOption();
+				}
+				skipOtherwise = true;
+			}
+		}
+		return -1;
 	}
 	// Evaluate basic control flow
 	foreach(ref item; seq.dialog) {
@@ -217,7 +252,6 @@ void analyzeControlFlow(ref DialogSequence seq) {
 		if(item.usesTrivialExit()) {
 			enteredSet = true;
 			item.nextOnEnter = -1;
-			writefln("%d: EXIT", item.id);
 		}
 		else if(item.usesSimpleGoto()) {
 			enteredSet = true;
@@ -227,7 +261,6 @@ void analyzeControlFlow(ref DialogSequence seq) {
 				item.nextOnEnter = *s;
 				item.controlFlow.makeEmpty();
 			}
-			writefln("%d: GOTO[%d]", item.id, item.nextOnEnter);
 		}
 		else if(item.child >= 0) {
 			DialogItem* child = seq.diaGet(item.child);
@@ -236,49 +269,13 @@ void analyzeControlFlow(ref DialogSequence seq) {
 			}
 			enteredSet = true;
 			item.nextOnEnter = item.child;
-			writefln("%d: CHILD[%d]", item.id, item.nextOnEnter);
 		}
-
-		if(item.next >= 0) {
-			int foundNext = findNext(&item, item.isOption());
-			if(!enteredSet) {
-				item.nextOnEnter = foundNext;
-				enteredSet = true;
-				writefln("%d: NEXT[%d]", item.id, item.nextOnEnter);
-			}
-			if(item.type == ParseNode.Type.option) {
-				item.nextOnSkip = foundNext;
-			}
-			else {
-				item.nextOnSkip = item.next;
-			}
+	
+		if(!enteredSet) {
+			item.nextOnEnter = findNextRecurse(&item, true, item.isOption());
+			enteredSet = true;
 		}
-		if(item.nextOnEnter == -1) {
-			int parent = item.parent;
-			bool skipOptions = item.isOption();
-			while(parent >= 0) {
-				DialogItem* diaParent = seq.diaGet(parent);
-				// If any node or parent is an option, we skip options
-				skipOptions |= diaParent.isOption();
-				int parentNext = findNext(diaParent, skipOptions);
-				if(parentNext >= 0) {
-					if(!enteredSet) {
-						item.nextOnEnter = parentNext;
-						enteredSet = true;
-						writefln("%d: RECURSIVE[%d]", item.id, item.nextOnEnter);
-					}
-					item.nextOnSkip = parentNext;
-					break;
-				}
-				else {
-					parent = diaParent.parent;
-				}
-			}
-		}
-		if (!enteredSet) {
-			writefln("%d: ENDING", item.id);
-		}
-		// TODO: check text tags and interpolations
+		item.nextOnSkip = findNextRecurse(&item, false, false);
 	}
 	// Second phase
 	// Skip multi-step control flow
@@ -323,6 +320,8 @@ void analyzeControlFlow(ref DialogSequence seq) {
 				}
 			}
 		}
+		referencedNodes[item.nextOnEnter] = true;
+		referencedNodes[item.nextOnSkip] = true;
 	}
 	// Count up label arguments
 	foreach(ref labelSet; seq.labelSets) {
@@ -332,6 +331,11 @@ void analyzeControlFlow(ref DialogSequence seq) {
 		}
 		foreach(key, _; counts) {
 			labelSet.argumentCounts ~= cast(uint) key;
+		}
+	}
+	foreach(ref item; seq.dialog) {
+		if(item.id !in referencedNodes) {
+			item.unreferenced = true;
 		}
 	}
 }

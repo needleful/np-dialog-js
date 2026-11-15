@@ -85,6 +85,11 @@ struct GDWriter(Writer) {
 		indent();
 		foreach(ref item; seq.dialog) {
 			addIndentation();
+			// Never seen, but add a line for debugging
+			if(item.unreachable) {
+				addLine("# Unreachable: %d", item.id);
+				continue;
+			}
 			bool hasCond = item.conditions.length > 0;
 			bool hasEffect = item.effects.length > 0;
 			bool hasControlFlow = !item.isTrivialControlFlow();

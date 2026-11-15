@@ -1,5 +1,8 @@
 [talked = #0]
 	This is our first time talking.
+	[cond a] A
+	[otherwise][cond b] B
+	[otherwise] C
 [otherwise][talked = #1]
 	This is our next time talking.
 	[game good?]
